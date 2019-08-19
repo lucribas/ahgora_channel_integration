@@ -12,9 +12,10 @@ end
 
 class Channel
 
-	def initialize( debug = false )
+	def initialize( debug = false, show_browser = false )
 		@debug = debug
 		@log = Nolog.new(debug)
+		@show_browser = show_browser
 	end
 
 	def set_log( log = nil )
@@ -40,7 +41,7 @@ class Channel
 		options.add_argument('--allow-insecure-localhost');
 		options.add_argument('--reduce-security-for-testing');
 		# configure the @driver to run in headless mode
-		options.add_argument('--headless')
+		options.add_argument('--headless') if !@show_browser
 
 		@driver = Selenium::WebDriver.for :chrome, options: options
 

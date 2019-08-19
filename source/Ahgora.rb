@@ -11,9 +11,10 @@ end
 
 class Ahgora
 
-	def initialize( debug = false )
+	def initialize( debug = false, show_browser = false )
 		@debug = debug
 		@log = Nolog.new(debug)
+		@show_browser = show_browser
 	end
 
 	def set_log( log = nil )
@@ -29,7 +30,7 @@ class Ahgora
 		#@driver = Selenium::WebDriver.for :chrome
 		# configure the @driver to run in headless mode
 		options = Selenium::WebDriver::Chrome::Options.new
-		options.add_argument('--headless')
+		options.add_argument('--headless') if !@show_browser
 
 		@driver = Selenium::WebDriver.for :chrome, options: options
 

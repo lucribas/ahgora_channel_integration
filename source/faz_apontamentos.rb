@@ -15,7 +15,7 @@ require 'pry'
 require "tty-prompt"
 require_relative 'Ahgora'
 require_relative 'Channel'
-require_relative './../../../../scripts/log/stdoutlog'
+require_relative 'stdoutlog'
 
 
 $debug		= false
@@ -31,6 +31,7 @@ settings = CLI.new do
 
 	description	"This script creates the Traceability Links into DOORS."
 	switch	:debug,			:short => :d,	:required => false,	:description => "Enables debug information"
+	switch	:show_browser,	:short => :s,	:required => false,	:description => "Show Browser"
 	option	:apw_ahgora,	:short => :a,	:required => false,	:description => "Ahgora password"
 	option	:apw_channel,	:short => :c,	:required => false,	:description => "Channel password"
 
@@ -39,6 +40,7 @@ end.parse! do |settings|
 	$log.debug( settings.inspect )
 	$apw_ahgora		= settings.apw_ahgora if !settings.apw_ahgora.nil?
 	$apw_channel	= settings.apw_channel if !settings.apw_channel.nil?
+	$show_browser	= true if !settings.show_browser.nil?
 end
 
 # Main
@@ -51,7 +53,7 @@ $log.info("# -------------------------------------------")
 $log.info("# Obtem batidas do Ahgora (PONTO ELETRONICO)")
 $log.info("# -------------------------------------------")
 
-ahgora = Ahgora.new( true )
+ahgora = Ahgora.new( true, $show_browser )
 ahgora.set_timestap($timestamp)
 ahgora.set_log($log)
 ahgora.open_web_session()
@@ -66,7 +68,7 @@ ah_bats.sort!.each { |l| $log.info( [l[0],l[2]].join(", ") ) }
 $log.info("# -------------------------------------------")
 $log.info("# Obtem apontamentos atuais do Channel")
 $log.info("# -------------------------------------------")
-channel = Channel.new( true )
+channel = Channel.new( true, $show_browser )
 channel.set_timestap($timestamp)
 channel.set_log($log)
 channel.open_web_session()
