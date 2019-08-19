@@ -10,3 +10,6 @@ Requisitos:
 
 Todo/Bugs/Sugestões:
 - Consultar https://github.com/lucribas/ahgora_channel_integration
+
+Example:
+![](demo.gif)
