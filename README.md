@@ -24,5 +24,10 @@ O projeto, tarefa, etc é atribuido pelo Script de forma automática. Quem for u
 
 ![](demo.gif)
 
+# Author:
+Luciano da Silva Ribas
+
+# Contributors:
+your name here :)
 
 Enjoy!
