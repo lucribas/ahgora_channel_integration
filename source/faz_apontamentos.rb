@@ -7,7 +7,7 @@
 # NOTES		: NA
 ###############################################################################
 
-require "win32ole"
+#require "win32ole"
 require "json"
 require "CSV"
 require 'cli'
