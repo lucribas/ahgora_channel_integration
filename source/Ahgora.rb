@@ -1,5 +1,6 @@
 require "selenium-webdriver"
 require "tty-prompt"
+require 'date'
 require_relative './vars'
 require 'pry'
 
@@ -40,6 +41,7 @@ class Ahgora
 
 	def web_login(ahgora_password)
 		#----- LOGIN -----
+		@log.info "navigate to #{AHGORA_LOGIN_URL}"
 		@driver.navigate.to AHGORA_LOGIN_URL
 
 		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
@@ -78,6 +80,7 @@ class Ahgora
 		batidas = []
 
 		#----- BATIDAS -----
+		@log.info "navigate to #{AHGORA_BATIDAS_URL}"
 		@driver.navigate.to AHGORA_BATIDAS_URL
 		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
 		sleep 1
@@ -141,7 +144,7 @@ class Ahgora
 					#7 --><--
 
 					if row_str[2].nil? then
-						@log.info "# ERROR: unexpected value of row2 in: #{row_str}"
+						@log.info "# WARNING: unexpected value of row2 in: #{row_str}"
 					else
 						#0 -->29/07<--
 						dia = valid_date?( "#{header.strip}/2019", "%d/%m/%Y" )
@@ -150,7 +153,7 @@ class Ahgora
 						bat = []
 						str_batidas = row_str[2].split(/, /)
 						if str_batidas.nil? then
-							@log.info "# ERROR: unexpected value of row2: #{row_str[2]}"
+							@log.info "# WARNING: unexpected value of row2: #{row_str[2]}"
 						else
 							str_batidas.each do |t|
 							 	bat.push( parseTime( t ) )
@@ -179,13 +182,12 @@ class Ahgora
 
 		# resize the window and take a screenshot
 		@driver.manage.window.resize_to(1200, 500+table_batidas.size*80)
-		@driver.save_screenshot "Ahgora_screenshot_#{@timestamp}.png"
+		@driver.save_screenshot "log/Ahgora_screenshot_#{@timestamp}.png"
 
 		return batidas
 	end
 
-	require 'date'
-	def valid_date?( str, format="%m/%d/%Y" )
+	def valid_date?( str, format="%d/%m/%Y" )
 	  Date.strptime(str,format) rescue false
 	end
 

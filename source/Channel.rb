@@ -1,5 +1,6 @@
 require "selenium-webdriver"
 require "tty-prompt"
+require 'date'
 require_relative './vars'
 require 'pry'
 
@@ -52,10 +53,11 @@ class Channel
 
 	def web_login(channel_password)
 
-		#----- LOGIN -----
-		@driver.navigate.to CHANNEL_LOGIN_URL
-
 		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
+
+		#----- LOGIN -----
+		@log.info "navigate to #{CHANNEL_LOGIN_URL}"
+		@driver.navigate.to CHANNEL_LOGIN_URL
 		@wait.until { @driver.title.downcase.start_with? "channel" }
 
 		# Enters with Login da Empresa and SUBMIT
@@ -93,8 +95,8 @@ class Channel
 		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
 
 		#----- Acessar Extrato entre 01/01/2019 e dia de hoje -----
-		@driver.navigate.to "https://channel.certi.org.br/channel/apontamento.do?action=listarDatas&retorno=painel"
-
+		@log.info "navigate to #{CHANNEL_EXTRATO_URL}"
+		@driver.navigate.to CHANNEL_EXTRATO_URL
 		@wait.until { @driver.find_element(id: "totalItensPagina").displayed? }
 
 		element = @driver.find_element(id: "totalItensPagina")
@@ -155,7 +157,7 @@ class Channel
 
 		# resize the window and take a screenshot
 		@driver.manage.window.resize_to(1200, 300+batidas.size*32)
-		@driver.save_screenshot "Channel_screenshot_#{@timestamp}.png"
+		@driver.save_screenshot "log/Channel_screenshot_#{@timestamp}.png"
 
 		#@driver.find_element(id: 'login').submit
 		return batidas
@@ -163,32 +165,100 @@ class Channel
 
 
 	def selectOption( _id, _opt_to_select)
-		element = @driver.find_element(id: _id)
-		options = element.find_elements(tag_name: "option")
 		found_ok = false
-		options.each { |option| begin option.click; found_ok=true; break option; end if option.text.start_with?(_opt_to_select) }
+		tries_cnt = 10
+		while (tries_cnt>0 and !found_ok)
+			begin
+				tries_cnt = tries_cnt - 1
+				element = @driver.find_element(id: _id)
+				options = element.find_elements(tag_name: "option")
+				options.each { |option| begin option.click; found_ok=true; break option; end if option.text.start_with?(_opt_to_select) }
+			rescue
+				@log.info "ERROR selecting option #{_opt_to_select} in #{_id}" if !found_ok
+			end
+		end
 		@log.info "ERROR selecting option #{_opt_to_select} in #{_id}" if !found_ok
+		return found_ok
 	end
 
+	def enterText( _id, _txt_to_enter)
+		found_ok = false
+		tries_cnt = 10
+		while (tries_cnt>0 and !found_ok)
+			begin
+				tries_cnt = tries_cnt - 1
+				element = @driver.find_element(id: _id)
+				element.clear
+				element.send_keys _txt_to_enter
+				found_ok = true
+			rescue StandardError => e
+				@log.info "ERROR entering text #{_txt_to_enter} in #{_id}" if !found_ok
+				@log.info "--> Error \"#{e.message}\"."
+				@log.info "#{e.backtrace}"
+#				binding.pry if tries_cnt < 2
+				sleep(0.3)
+			end
+		end
+		@log.info "ERROR entering text #{_txt_to_enter} in #{_id}" if !found_ok
+		return found_ok
+	end
+
+	def enterText2( _id1, _id2, _txt_to_enter)
+		found_ok = false
+		tries_cnt = 10
+		while (tries_cnt>0 and !found_ok)
+			begin
+				tries_cnt = tries_cnt - 1
+				element = @driver.find_element(id: _id1)
+				element = element.find_element(id: _id2)
+				element.clear
+				element.send_keys _txt_to_enter
+				found_ok = true
+			rescue StandardError => e
+				@log.info "ERROR entering with text #{_txt_to_enter} in #{_id1} -> #{_id2}" if !found_ok
+				@log.info "--> Error \"#{e.message}\"."
+				@log.info "#{e.backtrace}"
+#				binding.pry if tries_cnt < 2
+				sleep(0.3)
+			end
+		end
+		@log.info "ERROR entering text #{_txt_to_enter} in #{_id}" if !found_ok
+		return found_ok
+	end
 
 	def push_batida( opts )
 
 		@log.info ("push_batida: " + opts.inspect)
+		# # Exemplos de Formatos suportados
+		# # por PROJETOS
+		# opts[:"Tipo"] = "PROJETOS"
+		# opts[:"Projeto"] = "D15C0171.0"
+		# opts[:"Tipo de Atividade"] = "Nenhum"
+		# opts[:"Associar Atividade"] = "2.4.5.6"
+		# opts[:"Associar tarefa"] = "Nenhum"
+		# opts[:"Data"] = _str_dia
+		# opts[:"Duração"] = formatTime( duracao )
+		# opts[:"Comentarios"] = ""
 		#
-		# 		opts[:"Projeto"]
-		# 		"D15C0171.0"
-		# 		opts[:"Tipo de Atividade"]
-		# 		"Nenhum tipo"
-		# 		opts[:"Associar Atividade"]
-		# 		"1.4.3.5.3 Detailed Design Review"
-		# 		opts[:"Associar tarefa"]
-		# 		"Nenhuma tarefa"
-		# 		opts[:"Data"]
-		# 		opts[:"Duração"]
+		# # por OPERACOES
+		# opts[:"Tipo"] = "OPERACOES"
+		# opts[:"Operação"] = "Nenhum"
+		# opts[:"Tipo de Atividade"] = "Nenhum"
+		# opts[:"Rubrica"] = "Nenhum"
+		# opts[:"Passo do workflow"] = "Nenhum"
+		# opts[:"Solicitação"] = "Nenhum"
+		# opts[:"Tarefa de Solicitação"] = "Nenhum"
+		# opts[:"Cliente"] = "Nenhum"
+		# opts[:"Comentarios"] = ""
 		#
-		# https://channel.certi.org.br/channel/apontamento.do?action=novo
-
-
+		# # por AVULSO
+		# opts[:"Tipo"] = "AVULSO"
+		# opts[:"Cliente"] = "X"
+		# opts[:"Natureza da operação"] = "13. Formação" # 13. Formação/Capacitação
+		# opts[:"Tipo de Atividade"] = "99601 " # 99601 – Lightning Talk
+		# opts[:"Data"] = _str_dia
+		# opts[:"Duração"] = formatTime( duracao )
+		# opts[:"Comentarios"] = ""
 
 		#----- nao tem como acessar direto :( -----
 		#@driver.navigate.to "https://channel.certi.org.br/channel/apontamento.do?action=novo"
@@ -202,7 +272,8 @@ class Channel
 		end
 
 		if !found then
-			@driver.navigate.to "https://channel.certi.org.br/channel/apontamento.do?action=listarDatas&retorno=painel"
+			@log.info "navigate to #{CHANNEL_EXTRATO_URL}"
+			@driver.navigate.to CHANNEL_EXTRATO_URL
 			@wait.until { @driver.find_element(id: "incluirNovoApontamento").displayed? }
 		end
 
@@ -210,28 +281,52 @@ class Channel
 		@driver.find_element(id: "incluirNovoApontamento").click
 		@wait.until { @driver.find_element(id: "apontamento_diario").displayed? }
 
-		# Projeto
-		selectOption( "apontamento.projetosSelecionado", opts[:"Projeto"] )
+		if opts[:"Tipo"] == "PROJETOS" then
+			@driver.find_element(id: "tpApontamentoProjeto").click
+			selectOption( "apontamento.projetosSelecionado",		opts[:"Projeto"] )
+			selectOption( "apontamento.idTipoAtividadeProjeto",		opts[:"Tipo de Atividade"] )
+			selectOption( "apontamento.notificacaoSelecionada",		opts[:"Associar Atividade"] )
+			selectOption( "apontamento.idTarefa",					opts[:"Associar tarefa"] )
 
-		#Tipo de Atividade
-		selectOption( "apontamento.idTipoAtividadeProjeto", opts[:"Tipo de Atividade"] )
+		elsif opts[:"Tipo"] == "OPERACOES" then
+			@driver.find_element(id: "tpApontamentoOperacao").click
+			selectOption( "apontamento.idOperacao",					opts[:"Operação"] )
+			selectOption( "apontamento.idTipoAtividadeOperacao",	opts[:"Tipo de Atividade"] )
+			selectOption( "apontamento.idRubrica",					opts[:"Rubrica"] )
+			selectOption( "apontamento.idPassoWorkflow",			opts[:"Passo do workflow"] )
+			selectOption( "apontamento.idTicket",					opts[:"Solicitação"] )
+			selectOption( "apontamento.idTarefaTicket",				opts[:"Tarefa de Solicitação"] )
+			selectOption( "apontamento.clientesSelecionado",		opts[:"Cliente"] )
 
-		#Associar Tarefa
-		selectOption( "apontamento.notificacaoSelecionada", opts[:"Associar tarefa"] )
+		elsif opts[:"Tipo"] == "AVULSO" then
+			@driver.find_element(id: "tpApontamentoAvulso").click
+			enterText( "apontamento.nomeClienteSelecionadoAvulso",	opts[:"Cliente"] )
+			sleep(0.4)
+			begin
+				if @driver.find_element(:xpath, '//*[contains(@class, "ui-menu-item")]').text.include?(opts[:"Cliente"]) then
+					@driver.find_element(:xpath, '//*[contains(@class, "ui-menu-item")]').click
+				end
+			rescue StandardError => e
+				@log.info "ERROR entering with text #{opts[:"Cliente"]} in #{ui-menu-item}"
+				@log.info "--> Error \"#{e.message}\"."
+				@log.info "#{e.backtrace}"
+#				binding.pry if tries_cnt < 2
+			end
+			selectOption( "apontamento.nomeClienteSelecionadoAvulso",	opts[:"Cliente"] )
+			selectOption( "apontamento.tipoOperacaoSelecionado",	opts[:"Natureza da operação"] )
+			selectOption( "apontamento.idTipoAtividadeAvulso",		opts[:"Tipo de Atividade"] )
+
+		else
+			$log.info "ERROR: Operation " + opts[:"Tipo"] + " not supported!"
+		end
 
 		# Dia e Duração
-		dia_element = @driver.find_element(id: "apontamento_diario")
-		element = dia_element.find_element(id: "data")
-		element.clear
-		element.send_keys opts[:"Data"]
-		element = dia_element.find_element(id: "apontamento.duracao")
-		element.clear
-		element.send_keys opts[:"Duração"]
+		enterText2( "apontamento_diario", "data", 					opts[:"Data"] )
+		enterText2( "apontamento_diario", "apontamento.duracao",  	opts[:"Duração"] )
 
-		#Associar Atividade - Ao mudar o Projeto ele é recarregado - precisa de um sleep
-		sleep(0.3)
-		selectOption( "apontamento.notificacaoSelecionada", opts[:"Associar Atividade"] )
-
+		# Comentarios - nao funciona
+ 		#@driver.find_element(:xpath, '//*[contains(@class, "mceContentBody")]').send_keys opts[:"Comentarios"]
+		#enterText( "tinymce",	opts[:"Comentarios"] )
 		#binding.pry
 
 		# Click no Botao Incluir Novo Apontamento
@@ -259,8 +354,7 @@ class Channel
 		return result
 	end
 
-	require 'date'
-	def valid_date?( str, format="%m/%d/%Y" )
+	def valid_date?( str, format="%d/%m/%Y" )
 	  Date.strptime(str,format) rescue false
 	end
 

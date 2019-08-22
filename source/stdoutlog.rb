@@ -10,11 +10,13 @@ class StdoutLog
 		@file_name_int = file_name
 
 		if !file_name.nil? && file_name != "" then
+			directory_name = File.dirname(file_name)
+			Dir.mkdir(directory_name) unless File.exists?(directory_name)
 			@file = File.new(file_name,  "w")
 			puts "Created logfile: #{file_name}"
 		end
 	end
-	
+
 	def close()
 		puts "Closing logfile: #{@file_name_int}"
 		@file.close if !@file.nil?
