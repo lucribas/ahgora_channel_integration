@@ -76,24 +76,38 @@ class Ahgora
 
 
 	def get_batidas()
-
 		batidas = []
-
+		current_month = Time.new.strftime("%m-%Y")
 		#----- BATIDAS -----
 		@log.info "navigate to #{AHGORA_BATIDAS_URL}"
 		@driver.navigate.to AHGORA_BATIDAS_URL
 		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
 		sleep 1
 		@wait.until { @driver.title.downcase.start_with? ":: ahgora" }
-
 		@log.debug @driver.title
 		@log.debug "-----------------------------------------------------"
+		batidas = process_batidas()
+		
+		# verifica se precisa buscar o proximo mes - a partir do dia 25
+		if Time.new.strftime("%d").to_i > 25 then
+			next_month = (Time.new + 31*24*3600).strftime("%m-%Y")
 
-		## navegar para um mes especifico
-		# @driver.navigate.to "https://www.ahgora.com.br/externo/batidas/08-2019"
-		# @wait = Selenium::WebDriver::Wait.new(:timeout => 10)
-		# @wait.until { @driver.title.downcase.start_with? ":: ahgora" }
-
+			#----- BATIDAS -----
+			url = "https://www.ahgora.com.br/externo/batidas/#{next_month}"
+			@log.info "navigate to #{url}"
+			@driver.navigate.to url
+			@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
+			sleep 1
+			@wait.until { @driver.title.downcase.start_with? ":: ahgora" }
+			@log.debug @driver.title
+			@log.debug "-----------------------------------------------------"
+			batidas = batidas + process_batidas()
+		end
+		
+		return batidas
+	end
+	
+	def process_batidas()
 		horas_trab = 0
 		horas_neg = 0
 		horas_pos = 0
@@ -101,6 +115,11 @@ class Ahgora
 		horas_acc = 0
 		horas_banco = 0
 		batidas = []
+
+
+mes_batidas = @driver.find_elements(:xpath => "//*[contains(@id,'titulo_mes')]/span")
+
+		titulo_mes = @driver.find_elements(:xpath => "//*[contains(@id,'titulo_mes')]")[0].text.strip.gsub("/","_")
 
 		table_batidas = @driver.find_elements(:xpath => "//*[contains(@class,'table-batidas')]/tbody/tr")
 		@log.debug table_batidas
@@ -177,12 +196,11 @@ class Ahgora
 
 		#binding.pry
 
-
 		@log.debug "-----------------------------------------------------"
 
 		# resize the window and take a screenshot
 		@driver.manage.window.resize_to(1200, 500+table_batidas.size*80)
-		@driver.save_screenshot "log/Ahgora_screenshot_#{@timestamp}.png"
+		@driver.save_screenshot "log/Ahgora_screenshot_#{titulo_mes}_#{@timestamp}.png"
 
 		return batidas
 	end
