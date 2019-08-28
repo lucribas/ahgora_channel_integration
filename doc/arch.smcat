@@ -8,7 +8,7 @@ faz_apontamentos.rb: Chama as outras classes
 					 chama o Expert e faz os apontamentos,
 Ahgora.rb: Consulta ponto Ahgora,
 Channel.rb: Consulta e Inclui apontamentos Channel,
-Expert.rb: Analiser ponto e gera apontamentos;
+Expert.rb: Analisa ponto e gera apontamentos;
 
 //Transictions
 Ahgora.rb => faz_apontamentos.rb: get_batidas();
