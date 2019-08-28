@@ -34,6 +34,8 @@ class Expert
 		horas_saldo = parseTime(_str_horas_trabalhadas)
 		prompt = TTY::Prompt.new
 
+		@log.info "- Expert - dia: #{_str_dia} #{_str_horas_trabalhadas}"
+
 		if false then
 			# Exemplos de Formatos suportados
 			# por PROJETOS
@@ -99,7 +101,7 @@ class Expert
 		elsif dia > ( Date.today - 7) then
 
 			# pergunta se quer adicionar o projeto X
-			if prompt.yes?('Vc quer incluir o projeto X?') then
+			if prompt.yes?('Expert: Vc quer incluir o projeto X?') then
 				opts = {}
 				opts[:"Tipo"] = "PROJETOS"
 				opts[:"Projeto"] = "X"
@@ -115,7 +117,7 @@ class Expert
 			end
 
 			# Se for quarta-feira pergunta e associa o Lightning Talk de 15 minutos
-			if dia.wednesday? and prompt.yes?('Vc quer incluir o Lightning Talk de 15 minutos?') then
+			if dia.wednesday? and prompt.yes?('Expert: Vc quer incluir o Lightning Talk de 15 minutos?') then
 				opts = {}
 				opts[:"Tipo"] = "AVULSO"
 				opts[:"Cliente"] = "CERTI"
@@ -143,12 +145,13 @@ class Expert
 			horas_saldo = horas_saldo - duracao
 			result.push( opts )
 		else
-			@log.info "Expert ignorou o dia: #{_str_dia} #{_str_horas_trabalhadas}"
+			@log.info "Expert: ignorou o dia: #{_str_dia} #{_str_horas_trabalhadas}"
 		end
-		@log.info "-----------------------------------------"
-		@log.info "Expert atribuiu as seguintes atividades: #{_str_dia} #{_str_horas_trabalhadas}"
-		result.each { |o| @log.info "EXPERT - atividade: " + o.inspect }
-		@log.info "-----------------------------------------"
+		if result.size > 0 then
+			@log.info "Expert: atribuiu as seguintes atividades para o dia: #{_str_dia} #{_str_horas_trabalhadas}"
+			result.each { |o| @log.info "\t\t" + o.inspect }
+			@log.info "-------------------------------------------------------------------------------------------------"
+		end
 		return result
 	end
 
@@ -171,11 +174,13 @@ class Expert
 		horas_saldo = parseTime(_str_horas_trabalhadas)
 		prompt = TTY::Prompt.new
 
+		@log.info "- Expert - dia: #{_str_dia} #{_str_horas_trabalhadas}"
+
 		# ----------------------------------------
 		# dependendo do dia quebra a Atividade
 		# ----------------------------------------
 		# Se for quarta-feira pergunta e associa o Lightning Talk de 15 minutos
-		if dia.wednesday? and prompt.yes?('Vc quer incluir o Lightning Talk de 15 minutos?') then
+		if horas_saldo > 5 and dia.wednesday? and prompt.yes?('Expert: Vc quer incluir o Lightning Talk de 15 minutos?') then
 			opts = {}
 			opts[:"Tipo"] = "AVULSO"
 			opts[:"Cliente"] = "CERTI"
@@ -205,11 +210,13 @@ class Expert
 			horas_saldo = horas_saldo - duracao
 			result.push( opts )
 		else
-			@log.info "Expert ignorou o dia: #{_str_dia} #{_str_horas_trabalhadas}"
+			@log.info "Expert: ignorou o dia: #{_str_dia} #{_str_horas_trabalhadas}"
 		end
-		@log.info "-------------------------------------------------------------------------------------------------"
-		@log.info "Expert atribuiu as seguintes atividades para o dia: #{_str_dia} #{_str_horas_trabalhadas}"
-		result.each { |o| @log.info "EXPERT - atividade: " + o.inspect }
+		if result.size > 0 then
+			@log.info "Expert: atribuiu as seguintes atividades para o dia: #{_str_dia} #{_str_horas_trabalhadas}"
+			result.each { |o| @log.info "\t\t" + o.inspect }
+			@log.info "-------------------------------------------------------------------------------------------------"
+		end
 		return result
 	end
 
