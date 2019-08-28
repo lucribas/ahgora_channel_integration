@@ -20,9 +20,10 @@ O projeto, tarefa, etc é atribuido pelo Script de forma automática. Quem for u
 - Consultar https://github.com/lucribas/ahgora_channel_integration
 
 
-# Example:
+# Architecture:
 
-![](demo.gif)
+![](doc/arch.png)
+
 
 # Example of associaProjeto in Expert.rb:
 
@@ -91,6 +92,10 @@ O projeto, tarefa, etc é atribuido pelo Script de forma automática. Quem for u
 	end
   
 ~~~~
+
+# Example:
+
+![](demo.gif)
 
 
 # Author:
