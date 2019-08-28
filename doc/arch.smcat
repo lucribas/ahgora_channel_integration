@@ -1,0 +1,17 @@
+// use https://atom.io/packages/state-machine-cat-preview
+// press ctrl-shift-G
+
+//States
+faz_apontamentos.rb: Chama as outras classes
+ 					 consulta o ponto no Ahgora
+					 consulta os apontamentos do Channel
+					 chama o Expert e faz os apontamentos,
+Ahgora.rb: Consulta ponto Ahgora,
+Channel.rb: Consulta e Inclui apontamentos Channel,
+Expert.rb: Analiser ponto e gera apontamentos;
+
+//Transictions
+Ahgora.rb => faz_apontamentos.rb: get_batidas();
+Channel.rb => faz_apontamentos.rb: get_batidas();
+Expert.rb => faz_apontamentos.rb: associaProjeto();
+faz_apontamentos.rb => Channel.rb: push_batida();
