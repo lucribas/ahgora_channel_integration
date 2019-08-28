@@ -24,7 +24,7 @@ O projeto, tarefa, etc é atribuido pelo Script de forma automática. Quem for u
 
 ![](demo.gif)
 
-# Example of Expert
+# Example of associaProjeto in Expert.rb:
 
 ~~~~
 	# Metodo real usado - faca como o associaProjeto_exemplo e use a sua criatividade!
