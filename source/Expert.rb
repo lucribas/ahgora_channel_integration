@@ -184,8 +184,8 @@ class Expert
 			opts = {}
 			opts[:"Tipo"] = "AVULSO"
 			opts[:"Cliente"] = "CERTI"
-			opts[:"Natureza da operação"] = "13. Formação" # 13. Formação/Capacitação
-			opts[:"Tipo de Atividade"] = "99601 " # 99601 – Lightning Talk
+			opts[:"Natureza da operação"] = "13.Form" # 13. Formação/Capacitação
+			opts[:"Tipo de Atividade"] = "99601" # 99601 – Lightning Talk
 			opts[:"Data"] = _str_dia
 			duracao = 0.25  # 15 minutos => 15/60=0.25
 			opts[:"Duração"] = formatTime( duracao )

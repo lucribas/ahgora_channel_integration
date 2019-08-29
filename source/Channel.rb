@@ -312,7 +312,6 @@ class Channel
 				@log.info "#{e.backtrace}"
 #				binding.pry if tries_cnt < 2
 			end
-			selectOption( "apontamento.nomeClienteSelecionadoAvulso",	opts[:"Cliente"] )
 			selectOption( "apontamento.tipoOperacaoSelecionado",	opts[:"Natureza da operação"] )
 			selectOption( "apontamento.idTipoAtividadeAvulso",		opts[:"Tipo de Atividade"] )
 

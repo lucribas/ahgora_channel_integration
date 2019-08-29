@@ -3,7 +3,7 @@
 
 //States
 faz_apontamentos.rb: Chama as outras classes
- 					 consulta o ponto no Ahgora
+ 					 consulta o ponto do Ahgora
 					 consulta os apontamentos do Channel
 					 chama o Expert e faz os apontamentos,
 Ahgora.rb: Consulta ponto Ahgora,
