@@ -44,7 +44,7 @@ class Ahgora
 		@log.info "navigate to #{AHGORA_LOGIN_URL}"
 		@driver.navigate.to AHGORA_LOGIN_URL
 
-		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
+		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 		@wait.until { @driver.title.downcase.start_with? ":: ahgora" }
 
 		#Enters with Login da Empresa and SUBMIT
@@ -69,7 +69,7 @@ class Ahgora
 
 		#------ MENU
 		@log.debug @driver.title
-		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
+		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 		sleep 1
 		@wait.until { @driver.title.downcase.start_with? ":: ahgora" }
 	end
@@ -81,13 +81,13 @@ class Ahgora
 		#----- BATIDAS -----
 		@log.info "navigate to #{AHGORA_BATIDAS_URL}"
 		@driver.navigate.to AHGORA_BATIDAS_URL
-		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
+		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 		sleep 1
 		@wait.until { @driver.title.downcase.start_with? ":: ahgora" }
 		@log.debug @driver.title
 		@log.debug "-----------------------------------------------------"
 		batidas = process_batidas()
-		
+
 		# verifica se precisa buscar o proximo mes - a partir do dia 25
 		if Time.new.strftime("%d").to_i > 25 then
 			next_month = (Time.new + 31*24*3600).strftime("%m-%Y")
@@ -96,17 +96,17 @@ class Ahgora
 			url = "https://www.ahgora.com.br/externo/batidas/#{next_month}"
 			@log.info "navigate to #{url}"
 			@driver.navigate.to url
-			@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
+			@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 			sleep 1
 			@wait.until { @driver.title.downcase.start_with? ":: ahgora" }
 			@log.debug @driver.title
 			@log.debug "-----------------------------------------------------"
 			batidas = batidas + process_batidas()
 		end
-		
+
 		return batidas
 	end
-	
+
 	def process_batidas()
 		horas_trab = 0
 		horas_neg = 0

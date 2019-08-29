@@ -53,7 +53,7 @@ class Channel
 
 	def web_login(channel_password)
 
-		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
+		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 
 		#----- LOGIN -----
 		@log.info "navigate to #{CHANNEL_LOGIN_URL}"
@@ -83,7 +83,7 @@ class Channel
 
 		#-- MENU
 		@log.debug  @driver.title
-		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
+		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 		@wait.until { @driver.title.downcase.start_with? "channel" }
 
 	end
@@ -92,7 +92,7 @@ class Channel
 	def get_batidas()
 
 		batidas = []
-		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
+		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 
 		#----- Acessar Extrato entre 01/01/2019 e dia de hoje -----
 		@log.info "navigate to #{CHANNEL_EXTRATO_URL}"
@@ -112,7 +112,7 @@ class Channel
 		element.send_keys Time.new.strftime("%d/%m/%Y")
 		#element.find_elements(value: "Filtrar").click
 		@driver.find_element(:xpath, '//*[contains(@value, "Filtrar")]').click
-		@wait = Selenium::WebDriver::Wait.new(:timeout => 10)
+		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 
 		# Aguarda relatorio
 		@wait.until { @driver.title.downcase.start_with? "channel" }
