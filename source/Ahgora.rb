@@ -75,33 +75,60 @@ class Ahgora
 	end
 
 
-	def get_batidas()
+	def get_batidas( year_process )
 		batidas = []
-		current_month = Time.new.strftime("%m-%Y")
-		#----- BATIDAS -----
-		@log.info "navigate to #{AHGORA_BATIDAS_URL}"
-		@driver.navigate.to AHGORA_BATIDAS_URL
-		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
-		sleep 1
-		@wait.until { @driver.title.downcase.start_with? ":: ahgora" }
-		@log.debug @driver.title
-		@log.debug "-----------------------------------------------------"
-		batidas = process_batidas()
 
-		# verifica se precisa buscar o proximo mes - a partir do dia 25
-		if Time.new.strftime("%d").to_i > 25 then
-			next_month = (Time.new + 31*24*3600).strftime("%m-%Y")
 
+		if year_process == false then
+			# -------------------------------------------
+			# Pega os ultimos apontamentos apenas
+			# -------------------------------------------
+
+			current_month = Time.new.strftime("%m-%Y")
 			#----- BATIDAS -----
-			url = "https://www.ahgora.com.br/externo/batidas/#{next_month}"
-			@log.info "navigate to #{url}"
-			@driver.navigate.to url
+			@log.info "navigate to #{AHGORA_BATIDAS_URL}"
+			@driver.navigate.to AHGORA_BATIDAS_URL
 			@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 			sleep 1
 			@wait.until { @driver.title.downcase.start_with? ":: ahgora" }
 			@log.debug @driver.title
 			@log.debug "-----------------------------------------------------"
-			batidas = batidas + process_batidas()
+			batidas = process_batidas()
+			# verifica se precisa buscar o proximo mes - a partir do dia 25
+			if Time.new.strftime("%d").to_i > 25 then
+				next_month = (Time.new + 31*24*3600).strftime("%m-%Y")
+
+				#----- BATIDAS -----
+				url = "https://www.ahgora.com.br/externo/batidas/#{next_month}"
+				@log.info "navigate to #{url}"
+				@driver.navigate.to url
+				@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
+				sleep 1
+				@wait.until { @driver.title.downcase.start_with? ":: ahgora" }
+				@log.debug @driver.title
+				@log.debug "-----------------------------------------------------"
+				batidas = batidas + process_batidas()
+			end
+		else
+			# -------------------------------------------
+			# Pega desde o inicio do ano
+			# -------------------------------------------
+			# verifica se precisa buscar o proximo mes - a partir do dia 25
+			current_year = (Time.new).strftime("%Y")
+			next_month = ((Time.new + 31*24*3600).strftime("%m")).to_i
+			for month in 1..next_month
+				month_year = ("%.2d" % month) + "-" + ("%.4d" % current_year)
+				#----- BATIDAS -----
+				url = "https://www.ahgora.com.br/externo/batidas/#{month_year}"
+				@log.info "navigate to #{url}"
+				@driver.navigate.to url
+				@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
+				sleep 1
+				@wait.until { @driver.title.downcase.start_with? ":: ahgora" }
+				@log.debug @driver.title
+				@log.debug "-----------------------------------------------------"
+				batidas = batidas + process_batidas()
+			end
 		end
 
 		return batidas
@@ -117,12 +144,12 @@ class Ahgora
 		batidas = []
 
 
-mes_batidas = @driver.find_elements(:xpath => "//*[contains(@id,'titulo_mes')]/span")
+		mes_batidas = @driver.find_elements(:xpath => "//*[contains(@id,'titulo_mes')]/span")
 
 		titulo_mes = @driver.find_elements(:xpath => "//*[contains(@id,'titulo_mes')]")[0].text.strip.gsub("/","_")
 
 		table_batidas = @driver.find_elements(:xpath => "//*[contains(@class,'table-batidas')]/tbody/tr")
-		@log.debug table_batidas
+		@log.debug table_batidas.inspect
 		begin @log.info "# ERROR: table-batidas not found!"; binding.pry; end if table_batidas.nil?
 		table_batidas.each do |l|
 			@log.debug "---------------------------------------"
@@ -167,24 +194,27 @@ mes_batidas = @driver.find_elements(:xpath => "//*[contains(@id,'titulo_mes')]/s
 					else
 						#0 -->29/07<--
 						dia = valid_date?( "#{header.strip}/2019", "%d/%m/%Y" )
-
-						#2 -->09:14, 11:52, 12:53, 18:19<--
-						bat = []
-						str_batidas = row_str[2].split(/, /)
-						if str_batidas.nil? then
-							@log.info "# WARNING: unexpected value of row2: #{row_str[2]}"
-						else
-							str_batidas.each do |t|
-							 	bat.push( parseTime( t ) )
-							end
-							#6 -->Horas Trabalhadas: 08:04
-							#  Banco de Horas: 00:04<--
-							if row_str[6].start_with?("Horas Trabalhadas:")
-								spl = row_str[6].split(/: |\n/)
-								horas_trab = parseTime( spl[1] )
-								batidas.push( [ dia, horas_trab, spl[1] ] )
-								if !spl[2].nil? and spl[2].start_with?("Banco de Horas")
-									banco_horas = parseTime( spl[3] )
+						if dia then
+							#2 -->09:14, 11:52, 12:53, 18:19<--
+							bat = []
+							bat_str = []
+							str_batidas = row_str[2].split(/, /)
+							if str_batidas.nil? then
+								@log.info "# WARNING: unexpected value of row2: #{row_str[2]}"
+							else
+								str_batidas.each do |t|
+									bat.push( parseTime( t ) )
+									bat_str.push( t )
+								end
+								#6 -->Horas Trabalhadas: 08:04
+								#  Banco de Horas: 00:04<--
+								if row_str[6].start_with?("Horas Trabalhadas:")
+									spl = row_str[6].split(/: |\n/)
+									if !spl[2].nil? and spl[2].start_with?("Banco de Horas")
+										banco_horas = parseTime( spl[3] )
+									end
+									horas_trab = parseTime( spl[1] )
+									batidas.push( [ dia, horas_trab, spl[1], bat_str, banco_horas ] )
 								end
 							end
 						end

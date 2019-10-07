@@ -18,9 +18,10 @@ require_relative 'Channel'
 require_relative 'Expert'
 require_relative 'stdoutlog'
 
-
-$debug		= false
-$apw		= nil
+# switches
+$debug			= false
+$year_process	= false
+$show_browser	= false
 
 STDOUT.sync = true
 $timestamp = Time.new.strftime("%Y%m%d_%H%M%S")
@@ -31,18 +32,27 @@ $log = StdoutLog.new($debug, $log_file_name)
 settings = CLI.new do
 
 	description	"This script creates the Traceability Links into DOORS."
+
 	switch	:debug,			:short => :d,	:required => false,	:description => "Enables debug information"
 	switch	:show_browser,	:short => :s,	:required => false,	:description => "Show Browser"
+	switch	:year,			:short => :y,	:required => false,	:description => "Process all months of current year. Otherwise only current month."
+
 	option	:apw_ahgora,	:short => :a,	:required => false,	:description => "Ahgora password"
 	option	:apw_channel,	:short => :c,	:required => false,	:description => "Channel password"
 
 end.parse! do |settings|
+	# switches
 	$debug			= true if !settings.debug.nil?
-	$log.debug( settings.inspect )
+	$year_process	= true if !settings.year.nil?
+	$show_browser	= true if !settings.show_browser.nil?
+
+	# options
 	$apw_ahgora		= settings.apw_ahgora if !settings.apw_ahgora.nil?
 	$apw_channel	= settings.apw_channel if !settings.apw_channel.nil?
-	$show_browser	= true if !settings.show_browser.nil?
 end
+
+# Enable debug
+$log.set_debug_info($debug)
 
 # Main
 prompt = TTY::Prompt.new
@@ -59,10 +69,10 @@ ahgora.set_timestap($timestamp)
 ahgora.set_log($log)
 ahgora.open_web_session()
 ahgora.web_login($apw_ahgora)
-ahgora_bats = ahgora.get_batidas()
+ahgora_bats = ahgora.get_batidas($year_process)
 
 $log.debug( ahgora_bats.inspect )
-ahgora_bats.sort!.each { |l| $log.info( [l[0],l[2]].join(", ") ) }
+ahgora_bats.sort!.each { |l| $log.info( [l[0],l[2]].join(", ") + "\t[" + l[3].join(", ") + "]") }
 # [dia, horas_trab i, horas_trab str]
 
 
@@ -74,7 +84,7 @@ channel.set_timestap($timestamp)
 channel.set_log($log)
 channel.open_web_session()
 channel.web_login($apw_channel)
-channel_bats = channel.get_batidas()
+channel_bats = channel.get_batidas($year_process)
 
 $log.debug( channel_bats.inspect )
 channel_bats.sort!.each { |l| $log.info( [l[0],l[2]].join(", ") ) }

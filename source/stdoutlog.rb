@@ -23,6 +23,11 @@ class StdoutLog
 		@file = nil
 	end
 
+
+	def set_debug_info (debug_info)
+		@debug_info = debug_info
+	end
+
 	def timestamp()
 		time = Time.new
 		return time.strftime("%Y-%m-%d %H:%M:%S")

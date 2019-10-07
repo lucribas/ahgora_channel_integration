@@ -89,7 +89,16 @@ class Channel
 	end
 
 
-	def get_batidas()
+	def get_batidas( year_process )
+		# start of processing
+		start_date = ""
+		if year_process then
+			# from start of year
+			start_date = (Time.new - 31*24*3600).strftime("01/01/%Y")
+		else
+			# from last month
+			start_date = (Time.new - 31*24*3600).strftime("01/%m/%Y")
+		end
 
 		batidas = []
 		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
@@ -106,7 +115,7 @@ class Channel
 		@wait.until { @driver.find_element(name: 'dataInicial').displayed? }
 		element = @driver.find_element(id: 'conteudo').find_element(name: 'dataInicial')
 		element.clear
-		element.send_keys "01/01/2019"
+		element.send_keys start_date
 		element = @driver.find_element(id: 'conteudo').find_element(name: 'dataFinal')
 		element.clear
 		element.send_keys Time.new.strftime("%d/%m/%Y")
