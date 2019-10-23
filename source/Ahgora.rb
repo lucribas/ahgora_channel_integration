@@ -84,7 +84,7 @@ class Ahgora
 			# Pega os ultimos apontamentos apenas
 			# -------------------------------------------
 
-			current_month = Time.new.strftime("%m-%Y")
+			# current_month = Time.new.strftime("%m-%Y")
 			#----- BATIDAS -----
 			@log.info "navigate to #{AHGORA_BATIDAS_URL}"
 			@driver.navigate.to AHGORA_BATIDAS_URL
@@ -143,10 +143,12 @@ class Ahgora
 		horas_banco = 0
 		batidas = []
 
+		@wait.until { @driver.find_elements(:xpath => "//*[contains(@class,'table-batidas')]/tbody/tr") }
 
-		mes_batidas = @driver.find_elements(:xpath => "//*[contains(@id,'titulo_mes')]/span")
+		# mes_batidas = @driver.find_elements(:xpath => "//*[contains(@id,'titulo_mes')]/span")
 
 		titulo_mes = @driver.find_elements(:xpath => "//*[contains(@id,'titulo_mes')]")[0].text.strip.gsub("/","_")
+		@log.info "month: #{titulo_mes}"
 
 		table_batidas = @driver.find_elements(:xpath => "//*[contains(@class,'table-batidas')]/tbody/tr")
 		@log.debug table_batidas.inspect

@@ -120,6 +120,7 @@ class Channel
 		element.clear
 		element.send_keys Time.new.strftime("%d/%m/%Y")
 		#element.find_elements(value: "Filtrar").click
+		@wait.until { @driver.find_element(:xpath, '//*[contains(@value, "Filtrar")]').displayed? }
 		@driver.find_element(:xpath, '//*[contains(@value, "Filtrar")]').click
 		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 
