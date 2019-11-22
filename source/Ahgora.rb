@@ -1,5 +1,6 @@
-require "selenium-webdriver"
-require "tty-prompt"
+
+require 'selenium-webdriver'
+require 'tty-prompt'
 require 'date'
 require_relative './vars'
 require 'pry'

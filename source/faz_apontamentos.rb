@@ -8,11 +8,11 @@
 ###############################################################################
 
 #require "win32ole"
-require "json"
-require "CSV"
+require 'json'
+require 'csv'
 require 'cli'
 require 'pry'
-require "tty-prompt"
+require 'tty-prompt'
 require_relative 'Ahgora'
 require_relative 'Channel'
 require_relative 'Expert'
@@ -59,6 +59,8 @@ prompt = TTY::Prompt.new
 $apw_ahgora = prompt.mask("Enter your password for Ahgora?") if $apw_ahgora.nil?
 $apw_channel = prompt.mask("Enter your password for Channel?") if $apw_channel.nil?
 
+
+#tbd - speedup - rodar o get_batidas em // do ahgora e do channel
 
 $log.info("# -------------------------------------------")
 $log.info("# Obtem batidas do Ahgora (PONTO ELETRONICO)")

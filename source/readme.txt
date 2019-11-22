@@ -7,21 +7,19 @@ Requisitos:
 - Chrome browser
 
 
-Todo/Bugs/Sugestões:
+Todo/Bugs/Sugestï¿½es:
 - Consultar https://github.com/lucribas/ahgora_channel_integration
 
 
-
-Install:
+#Install Ruby:
+[Windows] https://rubyinstaller.org/downloads/
+get Ruby+Devkit 2.6.5-1 (x64)
+https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-2.6.5-1/rubyinstaller-devkit-2.6.5-1-x64.exe
 
 # setup
-gem install selenium-webdriver
-gem install require "json"
-gem install require "CSV"
-gem install require 'cli'
-gem install require 'pry'
-gem install require "tty-prompt"
- 
+cd source
+bundle install
+
 # edit the file vars.rb and put your IDs
 # put your Ahgora matricula here:
 AHGORA_MATRICULA='12345'
@@ -35,8 +33,8 @@ opts[:"Tipo de Atividade"] = "Nenhum"
 opts[:"Associar Atividade"] = "1.4.3.5.3"
 opts[:"Associar tarefa"] = "Nenhum"
 
-dica: escolha o começo do texto das opções assim o script não para de funcionar se alguem mudar a descrição do projeto / atividade / tarefa.
- 
+dica: escolha o comeï¿½o do texto das opï¿½ï¿½es assim o script nï¿½o para de funcionar se alguem mudar a descriï¿½ï¿½o do projeto / atividade / tarefa.
+
 # execution
 ruby .\faz_apontamentos.rb -c SENHA_CHANNEL -a SENHA_AHGORA
 
@@ -46,7 +44,7 @@ ruby .\faz_apontamentos.rb -c SENHA_CHANNEL -a SENHA_AHGORA
 |2019-08-19 16:19:33|INFO:  # -------------------------------------------
 |2019-08-19 16:19:33|INFO:  # Obtem batidas do Ahgora (PONTO ELETRONICO)
 |2019-08-19 16:19:33|INFO:  # -------------------------------------------
-|2019-08-19 16:19:50|INFO:  # ERROR: unexpected value of row2 in: ["Existem batidas ímpares"]
+|2019-08-19 16:19:50|INFO:  # ERROR: unexpected value of row2 in: ["Existem batidas ï¿½mpares"]
 |2019-08-19 16:20:02|INFO:  2019-07-26, 07:50
 |2019-08-19 16:20:02|INFO:  2019-07-29, 08:04
 |2019-08-19 16:20:02|INFO:  2019-07-30, 08:23
@@ -156,5 +154,5 @@ ruby .\faz_apontamentos.rb -c SENHA_CHANNEL -a SENHA_AHGORA
 |2019-08-19 16:20:19|INFO:  # -------------------------------------------
 |2019-08-19 16:20:19|INFO:  # Insere novos apontamentos
 |2019-08-19 16:20:19|INFO:  # -------------------------------------------
-|2019-08-19 15:22:11|INFO:  push_batida: {:Projeto=>"D15C0171.0", :"Tipo de Atividade"=>"Nenhum", :"Associar Atividade"=>"1.4.3.5.3", :"Associar tarefa"=>"Nenhum", :Data=>"15/08/2019", :Duração=>"10:21"}
+|2019-08-19 15:22:11|INFO:  push_batida: {:Projeto=>"D15C0171.0", :"Tipo de Atividade"=>"Nenhum", :"Associar Atividade"=>"1.4.3.5.3", :"Associar tarefa"=>"Nenhum", :Data=>"15/08/2019", :Duraï¿½ï¿½o=>"10:21"}
 |2019-08-19 15:22:14|INFO:  REGISTRO INSERIDO COM SUCESSO!

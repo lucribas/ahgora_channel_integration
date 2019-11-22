@@ -1,5 +1,5 @@
 
-require "tty-prompt"
+require 'tty-prompt'
 require_relative './vars'
 require 'date'
 require 'pry'
@@ -195,7 +195,10 @@ class Expert
 		end
 
 		# considera apenas os ultimos 15 dias e se o dia tem mais do que 5 horas
-		if dia > ( Date.today - 15) and horas_saldo > 5 then
+		#if dia > ( Date.today - 15) and horas_saldo > 5 then
+
+		# considera apenas os ultimos 15 dias antes de hoje
+		if dia > ( Date.today - 15) and dia < Date.today then
 			# atribui o resto das horas para o projeto Y
 			opts = {}
 			opts[:"Tipo"] = "PROJETOS"
