@@ -197,7 +197,34 @@ class Expert
 		# considera apenas os ultimos 15 dias e se o dia tem mais do que 5 horas
 		#if dia > ( Date.today - 15) and horas_saldo > 5 then
 
-		# considera apenas os ultimos 15 dias antes de hoje
+		#------------------------------------------------------------------
+		# PROJETOS
+
+		#1. considera um projeto que comecou em 08/01/2020 com diferentes cargas horarias
+		if dia > valid_date("08/01/2020") and dia < Date.today then
+			# atribui o resto das horas para o projeto Y
+			opts = {}
+			opts[:"Tipo"] = "PROJETOS"
+			opts[:"Projeto"] = "T15C0135.0"
+			opts[:"Tipo de Atividade"] = "Nenhum"
+			opts[:"Associar Atividade"] = "1.2.3.3"
+			opts[:"Associar tarefa"] = "Nenhum"
+			opts[:"Data"] = _str_dia
+
+			duracao = 0
+			duracao = 2 if dia >= valid_date("08/01/2020") && dia <= valid_date("10/01/2020")
+			duracao = 3 if dia >= valid_date("11/01/2020") && dia <= valid_date("17/01/2020")
+			duracao = 4 if dia >= valid_date("18/01/2020")
+
+			opts[:"Duração"] = formatTime( duracao )
+			opts[:"Comentarios"] = ""
+			horas_saldo = horas_saldo - duracao
+			result.push( opts )
+		else
+			@log.info "Expert: ignorou o dia: #{_str_dia} #{_str_horas_trabalhadas}"
+		end
+
+		#2. considera apenas os ultimos 15 dias antes de hoje
 		if dia > ( Date.today - 15) and dia < Date.today then
 			# atribui o resto das horas para o projeto Y
 			opts = {}
@@ -215,6 +242,9 @@ class Expert
 		else
 			@log.info "Expert: ignorou o dia: #{_str_dia} #{_str_horas_trabalhadas}"
 		end
+
+
+		#------------------------------------------------------------------
 		if result.size > 0 then
 			@log.info "Expert: atribuiu as seguintes atividades para o dia: #{_str_dia} #{_str_horas_trabalhadas}"
 			result.each { |o| @log.info "\t\t" + o.inspect }

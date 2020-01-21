@@ -196,7 +196,7 @@ class Ahgora
 						@log.info "# WARNING: unexpected value of row2 in: #{row_str}"
 					else
 						#0 -->29/07<--
-						dia = valid_date?( "#{header.strip}/2019", "%d/%m/%Y" )
+						dia = valid_date?( "#{header.strip}/2020", "%d/%m/%Y" )
 						if dia then
 							#2 -->09:14, 11:52, 12:53, 18:19<--
 							bat = []

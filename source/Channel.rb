@@ -178,17 +178,22 @@ class Channel
 	def selectOption( _id, _opt_to_select)
 		found_ok = false
 		tries_cnt = 10
+		str_options = []
 		while (tries_cnt>0 and !found_ok)
+			str_options = []
 			begin
 				tries_cnt = tries_cnt - 1
 				element = @driver.find_element(id: _id)
 				options = element.find_elements(tag_name: "option")
-				options.each { |option| begin option.click; found_ok=true; break option; end if option.text.start_with?(_opt_to_select) }
+				options.each { |option|
+					str_options.push(option.text)
+					begin option.click; found_ok=true; break option; end if option.text.start_with?(_opt_to_select) }
 			rescue
-				@log.info "ERROR selecting option #{_opt_to_select} in #{_id}" if !found_ok
+				@log.info "ERROR selecting option #{_opt_to_select} in #{_id}, valid options=[#{str_options.join(',')}]"
 			end
 		end
-		@log.info "ERROR selecting option #{_opt_to_select} in #{_id}" if !found_ok
+		@log.info "ERROR selecting option #{_opt_to_select} in #{_id}, valid options=[#{str_options.join(',')}]" if !found_ok
+		# binding.pry
 		return found_ok
 	end
 
