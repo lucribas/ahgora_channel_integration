@@ -160,7 +160,7 @@ class Expert
 	# Metodo real usado - faca como o associaProjeto_exemplo e use a sua criatividade!
 	def associaProjeto( _str_dia, _str_horas_trabalhadas)
 
-		# Edite o teu metodo aqui
+		# # Edite o teu metodo aqui
 		puts "=================================================="
 		puts "Edite o arquivo Expert.rb no metodo associaProjeto"
 		puts "use o associaProjeto_exemplo como exemplo"
@@ -180,19 +180,19 @@ class Expert
 		# dependendo do dia quebra a Atividade
 		# ----------------------------------------
 		# Se for quarta-feira pergunta e associa o Lightning Talk de 15 minutos
-		if horas_saldo > 5 and dia.wednesday? and prompt.yes?('Expert: Vc quer incluir o Lightning Talk de 15 minutos?') then
-			opts = {}
-			opts[:"Tipo"] = "AVULSO"
-			opts[:"Cliente"] = "CERTI"
-			opts[:"Natureza da operação"] = "13.Form" # 13. Formação/Capacitação
-			opts[:"Tipo de Atividade"] = "99601" # 99601 – Lightning Talk
-			opts[:"Data"] = _str_dia
-			duracao = 0.25  # 15 minutos => 15/60=0.25
-			opts[:"Duração"] = formatTime( duracao )
-			opts[:"Comentarios"] = ""
-			horas_saldo = horas_saldo - duracao
-			result.push( opts )
-		end
+		# if horas_saldo > 5 and dia.wednesday? and prompt.yes?('Expert: Vc quer incluir o Lightning Talk de 15 minutos?') then
+		# 	opts = {}
+		# 	opts[:"Tipo"] = "AVULSO"
+		# 	opts[:"Cliente"] = "CERTI"
+		# 	opts[:"Natureza da operação"] = "13.Form" # 13. Formação/Capacitação
+		# 	opts[:"Tipo de Atividade"] = "99601" # 99601 – Lightning Talk
+		# 	opts[:"Data"] = _str_dia
+		# 	duracao = 0.25  # 15 minutos => 15/60=0.25
+		# 	opts[:"Duração"] = formatTime( duracao )
+		# 	opts[:"Comentarios"] = ""
+		# 	horas_saldo = horas_saldo - duracao
+		# 	result.push( opts )
+		# end
 
 		# considera apenas os ultimos 15 dias e se o dia tem mais do que 5 horas
 		#if dia > ( Date.today - 15) and horas_saldo > 5 then
@@ -225,6 +225,7 @@ class Expert
 		end
 
 		#2. considera apenas os ultimos 15 dias antes de hoje
+		# if dia > valid_date("20/01/2020") and dia < Date.today then
 		if dia > ( Date.today - 15) and dia < Date.today then
 			# atribui o resto das horas para o projeto Y
 			opts = {}

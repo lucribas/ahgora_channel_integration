@@ -157,6 +157,7 @@ new_bats.each { |n|
 		flag_insert = false
 		if flag_all
 			flag_insert = true
+			sleep(2)
 		else
 			puts("\n-> #{opts.inspect}")
 			case prompt.expand('-> Insere novo apontamento?', choices)
