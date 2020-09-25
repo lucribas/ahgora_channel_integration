@@ -1,0 +1,8 @@
+cmd.txt
+**/log/**
+*.lock
+*.log
+*.bak
+*.exe
+
+
