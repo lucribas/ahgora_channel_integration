@@ -26,6 +26,22 @@ gem install bundler
 bundle install
 ```
 
+Linux Ubuntu
+```bash
+wget https://chromedriver.storage.googleapis.com/96.0.4664.45/chromedriver_linux64.zip
+unzip chromedriver_linux64.zip
+
+# Install Ruby
+apt-get install ruby-full
+config set --local path 'vendor/bundle'
+# Install the bundler package management and run it
+bundle install
+
+sudo gem install tty-prompt
+sudo gem install selenium-webdriver
+```
+
+
 
 # Todo/Bugs/Sugestões:
 - Consultar https://github.com/lucribas/ahgora_channel_integration
@@ -101,7 +117,7 @@ bundle install
 		end
 		return result
 	end
-  
+
 ~~~~
 
 # Example:
