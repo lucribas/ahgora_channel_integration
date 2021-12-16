@@ -61,7 +61,7 @@ $log.set_debug_info($debug)
 
 # Main
 prompt = TTY::Prompt.new
-$apw_ahgora = prompt.mask("Enter your password for Ahgora?") if $apw_ahgora.nil?
+$apw_ahgora = prompt.mask("Enter your password for Ahgora?") if $apw_ahgora.nil? && settings.import_csv.nil?
 $apw_channel = prompt.mask("Enter your password for Channel?") if $apw_channel.nil?
 
 choices = [
@@ -78,19 +78,19 @@ if ($import_csv.nil?) then
 	$log.info("# -------------------------------------------")
 	$log.info("# Obtem batidas do Ahgora (PONTO ELETRONICO)")
 	$log.info("# -------------------------------------------")
-	
+
 	ahgora = Ahgora.new( true, $show_browser )
 	ahgora.set_timestap($timestamp)
 	ahgora.set_log($log)
 	ahgora.open_web_session()
 	ahgora.web_login($apw_ahgora)
 	ahgora_bats = ahgora.get_batidas($year_process)
-	
+
 	$log.debug( ahgora_bats.inspect )
 	ahgora_bats.sort!.each { |l| $log.info( [l[0],l[2]].join(", ") + "\t[" + l[3].join(", ") + "]") }
 	# [dia, horas_trab i, horas_trab str]
-	
-	
+
+
 	$log.info("# -------------------------------------------")
 	$log.info("# Obtem apontamentos atuais do Channel")
 	$log.info("# -------------------------------------------")
@@ -100,28 +100,28 @@ if ($import_csv.nil?) then
 	channel.open_web_session()
 	channel.web_login($apw_channel)
 	channel_bats = channel.get_batidas($year_process)
-	
+
 	$log.debug( channel_bats.inspect )
 	channel_bats.sort!.each { |l| $log.info( [l[0],l[2]].join(", ") ) }
 	# [dia, horas_trab i, horas_trab str]
-	
-	
-	
+
+
+
 	$log.info("# -------------------------------------------")
 	$log.info("# Ahgora x Channel - Analise")
 	$log.info("# -------------------------------------------")
 	d = Date.today
-	
+
 	ctmp = channel_bats.map { |a| [a[0],a[2]] }
 	hash_channel_bats = ctmp.to_h
 	keys_channel = hash_channel_bats.keys.sort
-	
+
 	ctmp = ahgora_bats.map { |a| [a[0],a[2]] }
 	hash_ahgora_bats = ctmp.to_h
 	keys_ahgora = hash_ahgora_bats.keys.sort
-	
+
 	#binding.pry
-	
+
 	new_bats = []
 	# para cada ponto no ahgora
 	keys_ahgora.each { |kahgora|
@@ -143,11 +143,11 @@ if ($import_csv.nil?) then
 			end
 		end
 	}
-	
+
 	$log.info("# -------------------------------------------")
 	$log.info("# Insere novos apontamentos")
 	$log.info("# -------------------------------------------")
-	
+
 	# Usa classe expert que faz associação das atividades
 	expert = Expert.new( false )
 	expert.set_timestap($timestamp)
@@ -187,7 +187,7 @@ else
 	$log.info("# Reading CSV file")
 	$log.info("# -------------------------------------------")
 	appointments = CSV.parse(File.read($import_csv), headers: true)
-	
+
 	# binding.pry
 
 	$log.info("# -------------------------------------------")
@@ -203,7 +203,7 @@ else
 	appointments.each { |topts|
 		opts={}
 		# binding.pry
-		opts[:"Tipo"] 				= topts["Tipo"] 
+		opts[:"Tipo"] 				= topts["Tipo"]
 		opts[:"Projeto"] 			= topts["Projeto"]
 		opts[:"Tipo de Atividade"] 	= topts["Tipo de Atividade"]
 		opts[:"Associar Atividade"] = topts["Associar Atividade"]

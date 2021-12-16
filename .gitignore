@@ -4,5 +4,7 @@ cmd.txt
 *.log
 *.bak
 *.exe
+lus@192.168.15.1
+vendor/bundle
 
 

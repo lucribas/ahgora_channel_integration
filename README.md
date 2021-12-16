@@ -1,17 +1,20 @@
+
+
 # ahgora_channel_integration
 Integration of Ahgora and Channel systems
 
-# Objetivo:
-Preenche de forma automatica o channel com base no Ahgora.
-Mantém o Channel sincronizado.
-
-# Como funciona:
-O script em Ruby controla uma instancia do browser e abre o Ahgora e o Channel. O script então navega pelas paginas da mesma forma que o usuário normal e obtem um relatório do ultimo mês do Ahgora e do Channel. Ele então faz a comparação entre o ponto eletronico e os apontamentos de projetos. A seguir ele mostra os novos apontamentos e pede a confirmação para inseri-los no Channel.
-
-O projeto, tarefa, etc é atribuido pelo Script de forma automática. Quem for usá-lo deve portanto modificar o script para o seu projeto default ou estabelecer regras ou divisões para quebrar as batidas do ponto em quantos apontamentos forem necessários.
 
 
-# Requisitos:
+
+# 1. Objetivo:
+Existe dois modos de opeção:
+
+1. ImportaCSV: Lê um arquivo .csv de apontamentos e preenche o Channel;
+2. ImportaAhgora: Acessa as batidas de ponto do Ahgora e preenche o Channel conforme um algoritmo previamente definido.
+
+# 2. Requisitos:
+
+## 2.1 Windows
 
 - Chrome browser
 	- Install Chrome: https://www.google.com/chrome/
@@ -26,7 +29,7 @@ gem install bundler
 bundle install
 ```
 
-Linux Ubuntu
+## 2.2 Linux Ubuntu
 ```bash
 wget https://chromedriver.storage.googleapis.com/96.0.4664.45/chromedriver_linux64.zip
 unzip chromedriver_linux64.zip
@@ -43,16 +46,45 @@ sudo gem install selenium-webdriver
 
 
 
-# Todo/Bugs/Sugestões:
-- Consultar https://github.com/lucribas/ahgora_channel_integration
+# 3. Modo Importa CSV
+
+Crie um arquivo `apontamentos.csv` conforme o exemplo abaixo:
+
+```csv
+
+Tipo,Projeto,Tipo de Atividade,Associar Atividade,Associar tarefa,Data,Duração,Comentarios
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,01/12/2021,08:00,
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,02/12/2021,08:00,
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,03/12/2021,07:15,
+PROJETOS,F01C0078.0,Nenhum,1.5,Nenhum,03/12/2021,00:45,CERTI REFLETE
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,06/12/2021,08:00,
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,07/12/2021,08:00,
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,08/12/2021,08:00,
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,09/12/2021,08:00,
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,10/12/2021,07:15,
+PROJETOS,F01C0078.0,Nenhum,1.2,Nenhum,10/12/2021,00:45,CERTI Informa
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,13/12/2021,08:00,
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,14/12/2021,08:00,
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,15/12/2021,08:00,
+PROJETOS,T15C0131.0,Nenhum,2.1.5.5,Nenhum,16/12/2021,08:00,
+```
+
+Observe que:
+- Cada linha é uma entrada no Channel
+- Nos campos de seleção (`Projeto`, `Tipo de Atividade`, `Associar Atividade`,`Associar tarefa`) apenas o começo do texto que aparece no Channel é suficiente para selecionar.
+- Por enquanto o campo de comentario não está sendo inserido.
+
+Para executar a importação execute:
+
+```bash
+export PATH=${PATH}:.
+ruby source/faz_apontamentos.rb -i apontamentos.csv
+```
 
 
-# Architecture:
 
-![](doc/arch.png)
-
-
-# Example of associaProjeto in Expert.rb:
+# 4. Modo Importa Ahgora
+## 4.1 Example of associaProjeto in Expert.rb:
 
 ~~~~
 	# Metodo real usado - faca como o associaProjeto_exemplo e use a sua criatividade!
@@ -120,13 +152,13 @@ sudo gem install selenium-webdriver
 
 ~~~~
 
-# Example:
+## 4.2 Example:
 
 ![](demo.gif)
 
 
 
-# setup
+## 4.3 setup
 - Edit the file `vars.rb` and put your IDs
 	- put your Ahgora matricula here:
 	`AHGORA_MATRICULA='12345'`
@@ -143,11 +175,11 @@ opts[:"Associar tarefa"] = "Nenhum"
 ```
 dica: escolha o começo do texto das opções assim o script não para de funcionar se alguem mudar a descrição do projeto / atividade / tarefa.
 
-# execution
+## 4.4 execution
 `ruby .\faz_apontamentos.rb -c SENHA_CHANNEL -a SENHA_AHGORA`
 
 
-# expected resuls
+## 4.5 expected resuls
 
 ```
 |2019-08-19 16:19:33|INFO:  # -------------------------------------------
@@ -267,8 +299,18 @@ dica: escolha o começo do texto das opções assim o script não para de funcio
 |2019-08-19 15:22:14|INFO:  REGISTRO INSERIDO COM SUCESSO!
 ```
 
-
-
-
-
 Enjoy!
+
+# 5. Architecture:
+
+![](doc/arch.png)
+
+## 5.1 Como funciona:
+O script em Ruby controla uma instancia do browser e abre o Ahgora e o Channel. O script então navega pelas paginas da mesma forma que o usuário normal e obtem um relatório do ultimo mês do Ahgora e do Channel. Ele então faz a comparação entre o ponto eletronico e os apontamentos de projetos. A seguir ele mostra os novos apontamentos e pede a confirmação para inseri-los no Channel.
+
+O projeto, tarefa, etc é atribuido pelo Script de forma automática. Quem for usá-lo deve portanto modificar o script para o seu projeto default ou estabelecer regras ou divisões para quebrar as batidas do ponto em quantos apontamentos forem necessários.
+
+
+# 6. Todo/Bugs/Sugestões:
+- Consultar https://github.com/lucribas/ahgora_channel_integration
+
