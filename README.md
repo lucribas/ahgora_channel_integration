@@ -32,6 +32,7 @@ bundle install
 ## 2.2 Linux Ubuntu
 ```bash
 wget https://chromedriver.storage.googleapis.com/96.0.4664.45/chromedriver_linux64.zip
+wget https://chromedriver.storage.googleapis.com/98.0.4758.102/chromedriver_linux64.zip
 unzip chromedriver_linux64.zip
 
 # Install Ruby

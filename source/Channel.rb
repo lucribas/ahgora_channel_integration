@@ -336,12 +336,12 @@ class Channel
 		end
 
 		# Dia e Duração
-		enterText2( "apontamento_diario", "data", 					opts[:"Data"] )
+		enterText2( "apontamento_diario", "data", 					Date.strptime(opts[:"Data"], "%d/%m/%Y").strftime("%d/%m/%Y") )
 		enterText2( "apontamento_diario", "apontamento.duracao",  	opts[:"Duração"] )
 
 		# Comentarios - nao funciona
  		#@driver.find_element(:xpath, '//*[contains(@class, "mceContentBody")]').send_keys opts[:"Comentarios"]
-		#enterText( "tinymce",	opts[:"Comentarios"] )
+		#enterText( "apontamento.comentario",	opts[:"Comentarios"] )
 		#binding.pry
 
 		# Click no Botao Incluir Novo Apontamento
