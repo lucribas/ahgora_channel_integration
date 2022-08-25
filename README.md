@@ -47,18 +47,14 @@ wget https://chromedriver.storage.googleapis.com/98.0.4758.102/chromedriver_linu
 unzip chromedriver_linux64.zip
 
 # Install Ruby
+echo "deb https://ppa.launchpadcontent.net/brightbox/ruby-ng/ubuntu/ focal main"|sudo tee  /etc/apt/sources.list.d/brightbox.list
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys  80F70E11F0F0D5F10CB20E62F5DA5F09C3173AA6
+sudo apt update
+sudo apt install ruby2.7
 
-## rvm
-
-sudo apt remove ruby
-sudo snap install ruby --channel=2.6/stable --classic
-
-
-
-sudo apt install rbenv
-
-
-
+ruby -version
+gem install bundle
+sudo gem install bundle
 
 # Install the bundler package management and run it
 bundle install
