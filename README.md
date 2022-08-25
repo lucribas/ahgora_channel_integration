@@ -29,15 +29,37 @@ gem install bundler
 bundle install
 ```
 
+
+### Update chromedriver
+
+Check current google-chrome version:
+```bash
+google-chrome --version
+```
+- Install Chrome driver: https://chromedriver.chromium.org/downloads
+Go to Chrome driver: https://chromedriver.chromium.org/downloads
+
 ## 2.2 Linux Ubuntu
+
 ```bash
 wget https://chromedriver.storage.googleapis.com/96.0.4664.45/chromedriver_linux64.zip
 wget https://chromedriver.storage.googleapis.com/98.0.4758.102/chromedriver_linux64.zip
 unzip chromedriver_linux64.zip
 
 # Install Ruby
-apt-get install ruby-full
-config set --local path 'vendor/bundle'
+
+## rvm
+
+sudo apt remove ruby
+sudo snap install ruby --channel=2.6/stable --classic
+
+
+
+sudo apt install rbenv
+
+
+
+
 # Install the bundler package management and run it
 bundle install
 
