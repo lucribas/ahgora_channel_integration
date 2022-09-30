@@ -57,6 +57,7 @@ gem install bundle
 sudo gem install bundle
 
 # Install the bundler package management and run it
+sudo apt install ruby-bundler
 bundle install
 
 sudo gem install tty-prompt
