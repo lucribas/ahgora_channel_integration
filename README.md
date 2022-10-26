@@ -41,16 +41,46 @@ Go to Chrome driver: https://chromedriver.chromium.org/downloads
 
 ## 2.2 Linux Ubuntu
 
+
 ```bash
+
+sudo apt upgrade google-chrome-stable
+
+
 wget https://chromedriver.storage.googleapis.com/96.0.4664.45/chromedriver_linux64.zip
 wget https://chromedriver.storage.googleapis.com/98.0.4758.102/chromedriver_linux64.zip
 unzip chromedriver_linux64.zip
 
 # Install Ruby
+
+
+## workaround for ubuntu 22.10
+/bin/bash --login
+rvm pkg install openssl
+rvm install 2.7.6 --with-openssl-dir=$HOME/.rvm/usr
+rvm use 2.7.6
+ruby -v
+gem install bundle
+bundle install
+gem install tty-prompt
+gem install selenium-webdriver
+gem install cli
+gem install pry
+cat cmd.txt
+
+## workaround for ubuntu 22.04
+sudo apt remove ruby`ruby -e 'puts RUBY_VERSION[/\d+\.\d+/]'`-dev
+sudo apt remove ruby3.0:i386
+sudo apt remove ruby3.0-dev
+sudo apt install ruby2.7 ruby2.7-dev
+sudo ln -s /usr/bin/ruby2.7 /usr/bin/ruby3.0
+
+# for ubuntu 20.04
 echo "deb https://ppa.launchpadcontent.net/brightbox/ruby-ng/ubuntu/ focal main"|sudo tee  /etc/apt/sources.list.d/brightbox.list
 sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys  80F70E11F0F0D5F10CB20E62F5DA5F09C3173AA6
 sudo apt update
 sudo apt install ruby2.7
+
 
 ruby -version
 gem install bundle
