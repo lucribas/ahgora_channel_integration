@@ -159,99 +159,25 @@ class Expert
 
 	# Metodo real usado - faca como o associaProjeto_exemplo e use a sua criatividade!
 	def associaProjeto( _str_dia, _str_horas_trabalhadas)
+		valid_date(_str_dia)
+		duracao = parseTime(_str_horas_trabalhadas)
+		raise ArgumentError, 'A duracao deve ser maior que zero' unless duracao.positive?
 
-		# # Edite o teu metodo aqui
-		puts "=================================================="
-		puts "Edite o arquivo Expert.rb no metodo associaProjeto"
-		puts "use o associaProjeto_exemplo como exemplo"
-		puts "crie a suas regras de associação de atividade!"
-		exit(-1)
+		opts = {
+			:"Tipo" => 'PROJETOS',
+			:"Projeto" => AppConfig.expert_project,
+			:"Tipo de Atividade" => AppConfig.expert_activity_type,
+			:"Associar Atividade" => AppConfig.expert_activity,
+			:"Associar tarefa" => AppConfig.expert_task,
+			:"Data" => _str_dia,
+			:"Duração" => formatTime(duracao),
+			:"Comentarios" => ''
+		}
 
-		# daqui pra baixo segue o meu de exemplo
-
-		result = []
-		dia = valid_date( _str_dia )
-		horas_saldo = parseTime(_str_horas_trabalhadas)
-		prompt = TTY::Prompt.new
-
-		@log.info "- Expert - dia: #{_str_dia} #{_str_horas_trabalhadas}"
-
-		# ----------------------------------------
-		# dependendo do dia quebra a Atividade
-		# ----------------------------------------
-		# Se for quarta-feira pergunta e associa o Lightning Talk de 15 minutos
-		# if horas_saldo > 5 and dia.wednesday? and prompt.yes?('Expert: Vc quer incluir o Lightning Talk de 15 minutos?') then
-		# 	opts = {}
-		# 	opts[:"Tipo"] = "AVULSO"
-		# 	opts[:"Cliente"] = "CERTI"
-		# 	opts[:"Natureza da operação"] = "13.Form" # 13. Formação/Capacitação
-		# 	opts[:"Tipo de Atividade"] = "99601" # 99601 – Lightning Talk
-		# 	opts[:"Data"] = _str_dia
-		# 	duracao = 0.25  # 15 minutos => 15/60=0.25
-		# 	opts[:"Duração"] = formatTime( duracao )
-		# 	opts[:"Comentarios"] = ""
-		# 	horas_saldo = horas_saldo - duracao
-		# 	result.push( opts )
-		# end
-
-		# considera apenas os ultimos 15 dias e se o dia tem mais do que 5 horas
-		#if dia > ( Date.today - 15) and horas_saldo > 5 then
-
-		#------------------------------------------------------------------
-		# PROJETOS
-
-		#1. considera um projeto que comecou em 08/01/2020 com diferentes cargas horarias
-		if dia > valid_date("08/01/2020") and dia < Date.today then
-			# atribui o resto das horas para o projeto Y
-			opts = {}
-			opts[:"Tipo"] = "PROJETOS"
-			opts[:"Projeto"] = "T15C0135.0"
-			opts[:"Tipo de Atividade"] = "Nenhum"
-			opts[:"Associar Atividade"] = "1.2.3.3"
-			opts[:"Associar tarefa"] = "Nenhum"
-			opts[:"Data"] = _str_dia
-
-			duracao = 0
-			duracao = 2 if dia >= valid_date("08/01/2020") && dia <= valid_date("10/01/2020")
-			duracao = 3 if dia >= valid_date("11/01/2020") && dia <= valid_date("17/01/2020")
-			duracao = 4 if dia >= valid_date("18/01/2020")
-
-			opts[:"Duração"] = formatTime( duracao )
-			opts[:"Comentarios"] = ""
-			horas_saldo = horas_saldo - duracao
-			result.push( opts )
-		else
-			@log.info "Expert: ignorou o dia: #{_str_dia} #{_str_horas_trabalhadas}"
-		end
-
-		#2. considera apenas os ultimos 15 dias antes de hoje
-		# if dia > valid_date("20/01/2020") and dia < Date.today then
-		if dia > ( Date.today - 15) and dia < Date.today then
-			# atribui o resto das horas para o projeto Y
-			opts = {}
-			opts[:"Tipo"] = "PROJETOS"
-			opts[:"Projeto"] = "D15C0171.0"
-			opts[:"Tipo de Atividade"] = "Nenhum"
-			opts[:"Associar Atividade"] = "1.4.3.5.3"
-			opts[:"Associar tarefa"] = "Nenhum"
-			opts[:"Data"] = _str_dia
-			duracao = horas_saldo
-			opts[:"Duração"] = formatTime( duracao )
-			opts[:"Comentarios"] = ""
-			horas_saldo = horas_saldo - duracao
-			result.push( opts )
-		else
-			@log.info "Expert: ignorou o dia: #{_str_dia} #{_str_horas_trabalhadas}"
-		end
-
-
-		#------------------------------------------------------------------
-		if result.size > 0 then
-			@log.info "Expert: atribuiu as seguintes atividades para o dia: #{_str_dia} #{_str_horas_trabalhadas}"
-			result.each { |o| @log.info "\t\t" + o.inspect }
-			@log.info "-------------------------------------------------------------------------------------------------"
-		end
-		return result
+		@log.info "Expert: atribuiu a atividade configurada para o dia: #{_str_dia} #{_str_horas_trabalhadas}"
+		@log.info "\t\t#{opts.inspect}"
+		@log.info "-------------------------------------------------------------------------------------------------"
+		[opts]
 	end
 
 
@@ -264,14 +190,9 @@ class Expert
 
 	# returns a Date type for a string that represents a date
 	def valid_date( str, format="%d/%m/%Y" )
-		begin
-	  		result = Date.strptime(str,format)
-		rescue StandardError => e
-			puts "--> Error \"#{e.message}\"."
-			@log.info "#{e.backtrace}"
-			exit(-1)
-		end
-		return result
+		Date.strptime(str, format)
+	rescue Date::Error => e
+		raise ArgumentError, "Data invalida: #{str} (#{e.message})"
 	end
 
 	# returns decimal hours from a string HH:MM
@@ -279,8 +200,7 @@ class Expert
 		sign = str.start_with?("-") ? -1 : 1
 		sp = str.split(":")
 		if sp.length!=2 then
-			@log.info "ERROR during parseTime of #{str}"
-			exit(-1)
+			raise ArgumentError, "Formato de duracao invalido: #{str}"
 		end
 		value = sign*(sign*sp[0].to_i*60+sp[1].to_i)/60.0
 		@log.debug "parseTime ==>#{str} : %.2f<===" % value

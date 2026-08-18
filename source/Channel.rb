@@ -1,5 +1,6 @@
 
 require 'selenium-webdriver'
+require 'webdrivers/chromedriver'
 require 'tty-prompt'
 require 'date'
 require_relative './vars'
@@ -29,23 +30,23 @@ class Channel
 	end
 
 	def open_web_session()
+		# O log detalhado do Selenium inclui os valores enviados aos campos do
+		# formulario. Mantenha-o em WARN para nunca registrar credenciais.
+		Selenium::WebDriver.logger.level = :warn
+		Webdrivers.logger.level = :warn
 
 		#sheet cheat https://gist.github.com/kenrett/7553278
 		#@driver = Selenium::WebDriver.for :chrome
 		options = Selenium::WebDriver::Chrome::Options.new
 
-		options.add_argument('--ignore-certificate-errors')
 		options.add_argument('--disable-popup-blocking')
 		options.add_argument('--disable-translate')
-		options.add_argument('--disable-web-security');
-		options.add_argument('--allow-running-insecure-content')
-		options.add_argument('--unsafely-treat-insecure-origin-as-secure=http://fonts.googleapis.com')
-		options.add_argument('--allow-insecure-localhost');
-		options.add_argument('--reduce-security-for-testing');
 		# configure the @driver to run in headless mode
-		options.add_argument('--headless') if !@show_browser
+		options.add_argument('--headless=new') if !@show_browser
+		options.add_argument('--window-size=1400,2300')
+		options.binary = AppConfig.chrome_binary unless AppConfig.chrome_binary.nil?
 
-		@driver = Selenium::WebDriver.for :chrome, options: options
+		@driver = Selenium::WebDriver.for :chrome, options: options, service: chrome_service
 
 		# resize the window
 		@driver.manage.window.resize_to(1400, 2300)
@@ -57,8 +58,8 @@ class Channel
 		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 
 		#----- LOGIN -----
-		@log.info "navigate to #{CHANNEL_LOGIN_URL}"
-		@driver.navigate.to CHANNEL_LOGIN_URL
+		@log.info "navigate to #{AppConfig.channel_login_url}"
+		@driver.navigate.to AppConfig.channel_login_url
 		@wait.until { @driver.title.downcase.start_with? "channel" }
 
 		# Enters with Login da Empresa and SUBMIT
@@ -74,39 +75,48 @@ class Channel
 		#@driver.execute_script("\$(\'#login #senha\').removeClass(\'hide\');")
 		@wait.until { @driver.find_element(name: 'password').displayed? }
 		element = @driver.find_element(id: 'loginForm').find_element(name: 'username')
-		element.send_keys CHANNEL_USERNAME
+		element.send_keys AppConfig.channel_username
 		element = @driver.find_element(id: 'loginForm').find_element(name: 'password')
 		element.send_keys channel_password
 		element.submit
-		#binding.pry
 
-		#tbd testar se sucesso..
-
-		#-- MENU
-		@log.debug  @driver.title
-		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
-		@wait.until { @driver.title.downcase.start_with? "channel" }
+		# O titulo tambem contem "Channel" na tela de login, portanto ele nao
+		# indica que a autenticacao terminou. Aguarde o formulario desaparecer
+		# antes de navegar para o extrato.
+		@wait.until do
+			begin
+				forms = @driver.find_elements(id: 'loginForm')
+				forms.empty? || forms.none?(&:displayed?)
+			rescue Selenium::WebDriver::Error::StaleElementReferenceError
+				false
+			end
+		end
+		@log.debug @driver.title
 
 	end
 
 
-	def get_batidas( year_process )
+	def get_batidas( year_process, period_month = nil )
 		# start of processing
 		start_date = ""
 		if year_process then
 			# from start of year
 			start_date = (Time.new - 31*24*3600).strftime("01/01/%Y")
+			end_date = Time.new.strftime("%d/%m/%Y")
 		else
-			# from last month
-			start_date = (Time.new - 31*24*3600).strftime("01/%m/%Y")
+			# Mesmo periodo de fechamento usado pelo espelho Ahgora: 26 a 25.
+			period_month ||= Date.today << 1
+			previous_month = period_month << 1
+			start_date = Date.new(previous_month.year, previous_month.month, 26).strftime("%d/%m/%Y")
+			end_date = Date.new(period_month.year, period_month.month, 25).strftime("%d/%m/%Y")
 		end
 
 		batidas = []
 		@wait = Selenium::WebDriver::Wait.new(:timeout => 30)
 
 		#----- Acessar Extrato entre 01/01/2019 e dia de hoje -----
-		@log.info "navigate to #{CHANNEL_EXTRATO_URL}"
-		@driver.navigate.to CHANNEL_EXTRATO_URL
+		@log.info "navigate to #{AppConfig.channel_extrato_url}"
+		@driver.navigate.to AppConfig.channel_extrato_url
 		@wait.until { @driver.find_element(id: "totalItensPagina").displayed? }
 
 		element = @driver.find_element(id: "totalItensPagina")
@@ -119,7 +129,7 @@ class Channel
 		element.send_keys start_date
 		element = @driver.find_element(id: 'conteudo').find_element(name: 'dataFinal')
 		element.clear
-		element.send_keys Time.new.strftime("%d/%m/%Y")
+		element.send_keys end_date
 		#element.find_elements(value: "Filtrar").click
 		@wait.until { @driver.find_element(:xpath, '//*[contains(@value, "Filtrar")]').displayed? }
 		@driver.find_element(:xpath, '//*[contains(@value, "Filtrar")]').click
@@ -288,8 +298,8 @@ class Channel
 		end
 
 		if !found then
-			@log.info "navigate to #{CHANNEL_EXTRATO_URL}"
-			@driver.navigate.to CHANNEL_EXTRATO_URL
+			@log.info "navigate to #{AppConfig.channel_extrato_url}"
+			@driver.navigate.to AppConfig.channel_extrato_url
 			@wait.until { @driver.find_element(id: "incluirNovoApontamento").displayed? }
 		end
 
@@ -377,8 +387,7 @@ class Channel
 		sign = str.start_with?("-") ? -1 : 1
 		sp = str.split(":")
 		if sp.length!=2 then
-			@log.info "ERROR during parseTime of #{str}"
-			exit(-1)
+			raise ArgumentError, "Formato de duracao invalido: #{str}"
 		end
 		value = sign*(sign*sp[0].to_i*60+sp[1].to_i)/60.0
 		@log.debug "parseTime ==>#{str} : %.2f<===" % value
@@ -386,7 +395,16 @@ class Channel
 	end
 
 	def close_web()
-		@driver.quit
+		@driver&.quit
+	end
+
+	private
+
+	def chrome_service
+		path = AppConfig.chromedriver_path
+		return Selenium::WebDriver::Service.chrome unless path
+
+		Selenium::WebDriver::Service.chrome(path: path)
 	end
 
 

@@ -2,15 +2,16 @@
 
 source "https://rubygems.org"
 
-git_source(:github) {|repo_name| "https://github.com/#{repo_name}" }
+ruby '>= 2.7.0'
 
-# dependences
-gem 'cli'
-gem 'csv'
-gem 'csv'
-gem 'date'
-gem 'json'
-gem 'pry'
-gem 'selenium-webdriver'
-gem 'tty-prompt'
-gem 'ffi'
+gem 'cli', '~> 1.4'
+gem 'csv', '~> 3.1'
+gem 'date', '~> 3.0'
+gem 'pry', '~> 0.14'
+gem 'selenium-webdriver', '4.8.6'
+gem 'tty-prompt', '~> 0.23'
+gem 'webdrivers', '~> 5.3'
+
+group :test do
+	gem 'minitest', '~> 5.0'
+end
