@@ -1,7 +1,22 @@
 require 'minitest/autorun'
 require 'open3'
 require 'rbconfig'
+require File.expand_path('../source/Ahgora', __dir__)
 require File.expand_path('../source/Expert', __dir__)
+
+class AhgoraPeriodTest < Minitest::Test
+	def test_week_inside_one_mirror_period_uses_one_month
+		months = Ahgora.new.mirror_months_for(Date.new(2026, 8, 17), Date.new(2026, 8, 23))
+
+		assert_equal [Date.new(2026, 8, 1)], months
+	end
+
+	def test_week_crossing_the_25th_uses_both_mirror_periods
+		months = Ahgora.new.mirror_months_for(Date.new(2026, 8, 24), Date.new(2026, 8, 30))
+
+		assert_equal [Date.new(2026, 8, 1), Date.new(2026, 9, 1)], months
+	end
+end
 
 class AppConfigTest < Minitest::Test
 	CONFIG_KEYS = %w[

@@ -84,16 +84,32 @@ class Ahgora
 	end
 
 
-	def get_batidas( year_process, period_month = nil )
+	def get_batidas( year_process, period_month = nil, start_date = nil, end_date = nil )
 		last_closed_month = period_month || (Date.today << 1)
-		months = if year_process
+		months = if start_date && end_date
+			mirror_months_for(start_date, end_date)
+		elsif year_process
 			(Date.new(last_closed_month.year, 1, 1)..last_closed_month)
 				.select { |date| date.day == 1 }
 		else
 			[last_closed_month]
 		end
 
-		months.flat_map { |month| process_mirror_month(month) }
+		batidas = months.flat_map { |month| process_mirror_month(month) }
+		return batidas unless start_date && end_date
+
+		batidas.select { |row| row[0].between?(start_date, end_date) }
+	end
+
+	def mirror_months_for(start_date, end_date)
+		first_month = mirror_month_for(start_date)
+		last_month = mirror_month_for(end_date)
+		(first_month..last_month).select { |date| date.day == 1 }
+	end
+
+	def mirror_month_for(date)
+		month = Date.new(date.year, date.month, 1)
+		date.day >= 26 ? (month >> 1) : month
 	end
 
 	def process_batidas_legacy()

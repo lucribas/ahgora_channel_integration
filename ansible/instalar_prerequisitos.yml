@@ -1,0 +1,84 @@
+---
+- name: Instalar os pre-requisitos do Ahgora Channel Integration
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    project_dir: "{{ playbook_dir | dirname }}"
+    system_packages:
+      - build-essential
+      - bundler
+      - liblzma-dev
+      - libxml2-dev
+      - libxslt1-dev
+      - ruby
+      - ruby-dev
+      - zlib1g-dev
+
+  tasks:
+    - name: Verificar se o sistema usa pacotes Debian
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == 'Debian'
+        fail_msg: Este playbook suporta Ubuntu e Debian.
+
+    - name: Instalar Ruby, Bundler e ferramentas de compilacao
+      become: true
+      ansible.builtin.apt:
+        name: "{{ system_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Verificar se Chrome ou Chromium esta instalado
+      ansible.builtin.shell: |
+        command -v google-chrome || command -v chromium || command -v chromium-browser
+      args:
+        executable: /bin/bash
+      register: browser_check
+      changed_when: false
+      failed_when: false
+
+    - name: Instalar Chromium quando nenhum navegador compativel existir
+      become: true
+      ansible.builtin.apt:
+        name: "{{ 'chromium-browser' if ansible_facts.distribution == 'Ubuntu' else 'chromium' }}"
+        state: present
+      when: browser_check.rc != 0
+
+    - name: Obter a versao de API do Ruby
+      ansible.builtin.command:
+        argv:
+          - ruby
+          - -e
+          - print RbConfig::CONFIG['ruby_version']
+      register: ruby_api
+      changed_when: false
+
+    - name: Definir o executavel do Bundler desta versao do Ruby
+      ansible.builtin.set_fact:
+        bundler_executable: >-
+          /usr/bin/bundle{{ ruby_api.stdout | regex_replace('^(\d+\.\d+).*', '\1') }}
+
+    - name: Verificar o executavel do Bundler
+      ansible.builtin.stat:
+        path: "{{ bundler_executable }}"
+      register: bundler_check
+
+    - name: Validar a instalacao do Bundler
+      ansible.builtin.assert:
+        that:
+          - bundler_check.stat.executable | default(false)
+        fail_msg: "Bundler nao encontrado em {{ bundler_executable }}."
+
+    - name: Instalar as gems do projeto
+      become: false
+      ansible.builtin.command:
+        argv:
+          - "{{ bundler_executable }}"
+          - install
+      args:
+        chdir: "{{ project_dir }}"
+      environment:
+        BUNDLE_PATH: "{{ project_dir }}/vendor/bundle"

@@ -25,6 +25,18 @@ Instale as dependencias na raiz do projeto:
 bundle install
 ```
 
+Em Ubuntu ou Debian, os pre-requisitos tambem podem ser preparados pelo
+playbook local (ele solicita a senha do `sudo`):
+
+```bash
+ansible-playbook --inventory 'localhost,' --connection local \
+  --ask-become-pass ansible/instalar_prerequisitos.yml
+```
+
+O `executar_ultima_semana.sh` chama esse playbook automaticamente na primeira
+execucao em que as gems ainda nao estiverem instaladas. Para esse bootstrap,
+o pacote `ansible` precisa estar disponivel no sistema.
+
 O projeto usa `webdrivers` para detectar a versao do Chrome e obter um
 ChromeDriver compativel. Para usar binarios instalados manualmente, configure
 `CHROME_BINARY` e/ou `CHROMEDRIVER_PATH`.
@@ -108,6 +120,17 @@ Para consultar e calcular os novos apontamentos sem grava-los:
 bundle exec ruby source/faz_apontamentos.rb --dry-run
 ```
 
+Para processar automaticamente o periodo entre 14 dias atras e a data atual,
+inclusive, use o script da raiz. Ele carrega `config.sh`, quando o arquivo
+existir, e aceita as mesmas opcoes da aplicacao, como `--dry-run`:
+
+```bash
+./executar_ultima_semana.sh --dry-run
+```
+
+Sem `--dry-run`, os novos apontamentos encontrados pedem confirmacao antes de
+serem incluidos no Channel.
+
 Para selecionar explicitamente um mes do espelho (por exemplo, agosto de
 2026), use:
 
@@ -127,6 +150,8 @@ Opcoes adicionais:
 - `-s`, `--show-browser`: exibe o navegador;
 - `-y`, `--year`: consulta os meses do ano atual;
 - `-m`, `--month AAAA-MM`: consulta um mes especifico do espelho;
+- `--start-date AAAA-MM-DD` e `--end-date AAAA-MM-DD`: consultam um intervalo
+  fechado de datas (as duas opcoes devem ser usadas juntas);
 - `-n`, `--dry-run`: simula as inclusoes.
 
 ## Arquitetura

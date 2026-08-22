@@ -96,10 +96,13 @@ class Channel
 	end
 
 
-	def get_batidas( year_process, period_month = nil )
+	def get_batidas( year_process, period_month = nil, requested_start_date = nil, requested_end_date = nil )
 		# start of processing
 		start_date = ""
-		if year_process then
+		if requested_start_date && requested_end_date
+			start_date = requested_start_date.strftime("%d/%m/%Y")
+			end_date = requested_end_date.strftime("%d/%m/%Y")
+		elsif year_process then
 			# from start of year
 			start_date = (Time.new - 31*24*3600).strftime("01/01/%Y")
 			end_date = Time.new.strftime("%d/%m/%Y")

@@ -11,7 +11,7 @@ class StdoutLog
 
 		if !file_name.nil? && file_name != "" then
 			directory_name = File.dirname(file_name)
-			Dir.mkdir(directory_name) unless File.exists?(directory_name)
+			Dir.mkdir(directory_name) unless File.exist?(directory_name)
 			@file = File.new(file_name,  "w")
 			puts "Created logfile: #{file_name}"
 		end

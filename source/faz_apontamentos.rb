@@ -79,12 +79,22 @@ rescue Date::Error
 	raise ArgumentError, 'Mes invalido: use o formato AAAA-MM'
 end
 
+def parse_period_date(value, option_name)
+	return nil if value.nil?
+
+	Date.iso8601(value)
+rescue Date::Error
+	raise ArgumentError, "Data invalida em #{option_name}: use o formato AAAA-MM-DD"
+end
+
 # switches
 $debug = false
 $year_process = false
 $show_browser = false
 $dry_run = false
 $period_month_option = nil
+$start_date_option = nil
+$end_date_option = nil
 
 STDOUT.sync = true
 $timestamp = Time.new.strftime('%Y%m%d_%H%M%S')
@@ -103,6 +113,8 @@ settings = CLI.new do
 	option :apw_channel, :short => :c, :required => false, :description => 'Senha do Channel'
 	option :import_csv, :short => :i, :required => false, :description => 'Arquivo CSV'
 	option :month, :short => :m, :required => false, :description => 'Mes do espelho no formato AAAA-MM'
+	option :start_date, :required => false, :description => 'Inicio do periodo no formato AAAA-MM-DD'
+	option :end_date, :required => false, :description => 'Fim do periodo no formato AAAA-MM-DD'
 end.parse! do |parsed|
 	$debug = true unless parsed.debug.nil?
 	$year_process = true unless parsed.year.nil?
@@ -112,6 +124,8 @@ end.parse! do |parsed|
 	$apw_channel = parsed.apw_channel unless parsed.apw_channel.nil?
 	$import_csv = parsed.import_csv unless parsed.import_csv.nil?
 	$period_month_option = parsed.month unless parsed.month.nil?
+	$start_date_option = parsed.start_date unless parsed.start_date.nil?
+	$end_date_option = parsed.end_date unless parsed.end_date.nil?
 end
 
 $log.set_debug_info($debug)
@@ -129,7 +143,16 @@ dry_run_count = 0
 
 begin
 	$period_month = parse_period_month($period_month_option)
+	$start_date = parse_period_date($start_date_option, '--start-date')
+	$end_date = parse_period_date($end_date_option, '--end-date')
 	raise ArgumentError, 'Use apenas uma das opcoes: --year ou --month' if $year_process && $period_month
+	if $start_date.nil? != $end_date.nil?
+		raise ArgumentError, 'Informe --start-date e --end-date em conjunto'
+	end
+	if $start_date && ($year_process || $period_month)
+		raise ArgumentError, 'O intervalo de datas nao pode ser combinado com --year ou --month'
+	end
+	raise ArgumentError, 'A data inicial deve ser anterior ou igual a data final' if $start_date && $start_date > $end_date
 
 	validate_configuration($import_csv, $dry_run)
 
@@ -142,13 +165,13 @@ begin
 		$log.info('# Obtem batidas do Ahgora (PONTO ELETRONICO)')
 		ahgora = prepare_web_client(Ahgora.new($debug, $show_browser), $timestamp, $log)
 		ahgora.web_login($apw_ahgora)
-		ahgora_bats = ahgora.get_batidas($year_process, $period_month)
+		ahgora_bats = ahgora.get_batidas($year_process, $period_month, $start_date, $end_date)
 		ahgora_bats.sort.each { |row| $log.info([row[0], row[2]].join(', ') + "\t[#{row[3].join(', ')}]") }
 
 		$log.info('# Obtem apontamentos atuais do Channel')
 		channel = prepare_web_client(Channel.new($debug, $show_browser), $timestamp, $log)
 		channel.web_login($apw_channel)
-		channel_bats = channel.get_batidas($year_process, $period_month)
+		channel_bats = channel.get_batidas($year_process, $period_month, $start_date, $end_date)
 		channel_bats.sort.each { |row| $log.info([row[0], row[2]].join(', ')) }
 
 		hash_channel_bats = channel_bats.map { |row| [row[0], row[2]] }.to_h
