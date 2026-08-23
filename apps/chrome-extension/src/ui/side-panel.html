@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ahgora para Channel</title>
+    <link rel="stylesheet" href="./side-panel.css" />
+  </head>
+  <body>
+    <main class="shell" aria-labelledby="title">
+      <header class="hero">
+        <p class="eyebrow">Transferência assistida</p>
+        <h1 id="title">Ahgora para Channel</h1>
+        <p>Capture, compare e preencha um item por vez para revisão.</p>
+        <button id="new-operation" type="button">Nova operação</button>
+      </header>
+
+      <section class="card" aria-labelledby="tabs-title">
+        <h2 id="tabs-title">1. Registrar abas</h2>
+        <p class="hint">
+          Escolha um papel, vá até a aba correta e clique no ícone da extensão.
+          Cada aba exige seu próprio gesto. O Ahgora também solicitará acesso ao
+          host exato do iframe do espelho.
+        </p>
+        <div class="tab-row">
+          <span>Ahgora</span
+          ><output id="source-state" class="pill">Não registrado</output
+          ><button id="register-source" type="button">Registrar</button>
+        </div>
+        <div class="tab-row">
+          <span>Channel</span
+          ><output id="target-state" class="pill">Não registrado</output
+          ><button id="register-target" type="button">Registrar</button>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="config-title">
+        <h2 id="config-title">2. Configurar</h2>
+        <div class="field-grid">
+          <label
+            >Projeto
+            <input
+              id="project"
+              value="D15C0401.0 PETROBRAS_SUSTENTAÇÃO CERTIFICARE"
+              autocomplete="off"
+              required
+          /></label>
+          <label
+            >Atividade
+            <input
+              id="activity"
+              value="1.3 ME04_Medição de agosto.26"
+              autocomplete="off"
+              required
+          /></label>
+          <label
+            >Tipo de atividade
+            <input id="activity-type" value="Nenhum" autocomplete="off"
+          /></label>
+          <label
+            >Tarefa <input id="task" value="Nenhum" autocomplete="off"
+          /></label>
+          <label
+            >Período
+            <select id="period-kind">
+              <option value="default">Mês-calendário anterior</option>
+              <option value="month">Mês específico</option>
+              <option value="range">Intervalo inclusivo</option>
+            </select>
+          </label>
+          <label id="month-field" hidden
+            >Mês de fechamento <input id="month" type="month"
+          /></label>
+          <label id="start-field" hidden
+            >Data inicial <input id="start" type="date"
+          /></label>
+          <label id="end-field" hidden
+            >Data final <input id="end" type="date"
+          /></label>
+        </div>
+        <label
+          >Overrides desta operação
+          <textarea
+            id="overrides"
+            rows="3"
+            placeholder="2026-08-03=08:00,12:00,13:00,17:00"
+          ></textarea>
+        </label>
+        <p class="hint">
+          Um por linha, no formato AAAA-MM-DD=HH:MM,HH:MM. Ficam somente na
+          sessão do navegador.
+        </p>
+        <button id="capture" class="primary" type="button">
+          Capturar e comparar
+        </button>
+      </section>
+
+      <section class="card" aria-labelledby="progress-title">
+        <h2 id="progress-title">3. Estado da operação</h2>
+        <ol class="steps" aria-label="Etapas">
+          <li id="step-captured">Capturado</li>
+          <li id="step-validated">Validado</li>
+          <li id="step-filled">Preenchido</li>
+          <li id="step-confirmed">Confirmado pelo site</li>
+          <li aria-disabled="true">Enviado <small>indisponível</small></li>
+        </ol>
+        <output id="operation-status" class="notice" aria-live="polite"
+          >Pronto para configurar.</output
+        >
+        <p id="effective-period" class="hint"></p>
+      </section>
+
+      <section class="card" aria-labelledby="preview-title">
+        <div class="section-heading">
+          <h2 id="preview-title">4. Prévia</h2>
+          <span id="totals" class="pill">0 itens</span>
+        </div>
+        <dl class="hour-totals" aria-label="Totais da prévia">
+          <div>
+            <dt>Capturado</dt>
+            <dd><output id="total-captured">00:00 · 0 registros</output></dd>
+          </div>
+          <div>
+            <dt>Novos para revisar (pré-seleção)</dt>
+            <dd><output id="total-review">00:00 · 0 itens</output></dd>
+          </div>
+          <div>
+            <dt>A preencher (selecionados)</dt>
+            <dd><output id="total-selected">00:00 · 0 itens</output></dd>
+          </div>
+        </dl>
+        <p class="hint">
+          Nada é selecionado inicialmente. Dias iguais ou divergentes não são
+          alterados.
+        </p>
+        <div id="preview" class="preview" role="list"></div>
+        <div class="actions">
+          <button id="select-remaining" type="button">
+            Selecionar restantes
+          </button>
+          <button id="dry-run" type="button">Executar dry-run</button>
+          <button id="apply" class="primary" type="button" disabled>
+            Aplicar selecionados
+          </button>
+          <button id="advance" class="primary" type="button" hidden>
+            Revise/salve no Channel e avançar
+          </button>
+          <button id="cancel" class="danger" type="button">
+            Cancelar operação
+          </button>
+        </div>
+        <p class="warning">
+          A extensão nunca clica em Salvar nem envia o formulário. O Channel
+          legado comporta um item; revise e salve manualmente antes de avançar a
+          fila.
+        </p>
+      </section>
+    </main>
+    <script type="module" src="./side-panel.ts"></script>
+  </body>
+</html>

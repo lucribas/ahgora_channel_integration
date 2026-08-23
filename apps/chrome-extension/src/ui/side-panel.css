@@ -1,0 +1,246 @@
+:root {
+  color: #172331;
+  background: #eef3f6;
+  font:
+    14px/1.45 system-ui,
+    sans-serif;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+[hidden] {
+  display: none !important;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button {
+  min-height: 2.4rem;
+  border: 1px solid #64798a;
+  border-radius: 0.45rem;
+  background: #fff;
+  color: #172331;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  background: #e6eef3;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #1675a9;
+  outline-offset: 2px;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.primary {
+  border-color: #075d8c;
+  background: #075d8c;
+  color: #fff;
+}
+.primary:hover:not(:disabled) {
+  background: #064b71;
+}
+.danger {
+  border-color: #9a3030;
+  color: #7d2020;
+}
+.shell {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.9rem;
+}
+.hero {
+  padding: 0.3rem 0.2rem;
+}
+h1,
+h2,
+p {
+  margin-block: 0 0.5rem;
+}
+h1 {
+  font-size: 1.45rem;
+}
+h2 {
+  font-size: 1rem;
+}
+.eyebrow {
+  color: #245a75;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.card {
+  display: grid;
+  gap: 0.65rem;
+  border: 1px solid #bdcbd4;
+  border-radius: 0.65rem;
+  background: #fff;
+  padding: 0.8rem;
+}
+.tab-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  background: #e8eef2;
+  padding: 0.18rem 0.5rem;
+  font-size: 0.82rem;
+}
+.pill.ready {
+  background: #d8efdf;
+  color: #145d2c;
+}
+.field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.65rem;
+}
+label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 650;
+}
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #8093a0;
+  border-radius: 0.35rem;
+  background: #fff;
+  padding: 0.48rem;
+  color: inherit;
+  font-weight: 400;
+}
+textarea {
+  resize: vertical;
+}
+.hint,
+small {
+  color: #516572;
+  font-size: 0.82rem;
+}
+.steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.steps li {
+  border-left: 4px solid #9eabb3;
+  padding: 0.25rem 0.4rem;
+}
+.steps li.done {
+  border-color: #23753c;
+  background: #edf8f0;
+}
+.steps li[aria-disabled='true'] {
+  color: #65737d;
+}
+.notice {
+  display: block;
+  border: 1px solid #86a9bb;
+  border-radius: 0.45rem;
+  background: #f2f8fb;
+  padding: 0.6rem;
+}
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.hour-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0;
+}
+.hour-totals div {
+  border: 1px solid #d2dce2;
+  border-radius: 0.45rem;
+  background: #f7fafb;
+  padding: 0.5rem;
+}
+.hour-totals dt {
+  color: #516572;
+  font-size: 0.75rem;
+}
+.hour-totals dd {
+  margin: 0.15rem 0 0;
+  font-weight: 750;
+}
+.preview {
+  display: grid;
+  gap: 0.45rem;
+}
+.item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.5rem;
+  align-items: start;
+  border: 1px solid #d2dce2;
+  border-radius: 0.45rem;
+  padding: 0.55rem;
+}
+.item p {
+  margin: 0;
+}
+.item .meta {
+  color: #516572;
+  font-size: 0.82rem;
+}
+.result {
+  font-weight: 700;
+}
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.actions .primary,
+.actions .danger {
+  grid-column: 1 / -1;
+}
+.warning {
+  border-left: 4px solid #a76700;
+  background: #fff7e6;
+  padding: 0.55rem;
+}
+@media (max-width: 360px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+  .tab-row {
+    grid-template-columns: 1fr auto;
+  }
+  .tab-row .pill {
+    grid-row: 2;
+  }
+  .hour-totals {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}

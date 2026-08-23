@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Ahgora para Channel",
+  "description": "Prepara apontamentos para revisão usando abas já autenticadas.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "scripting", "storage", "sidePanel"],
+  "optional_host_permissions": ["https://mirror.app.ahgora.com.br/*"],
+  "action": {
+    "default_title": "Abrir Ahgora para Channel"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.ts",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "src/ui/side-panel.html"
+  }
+}
