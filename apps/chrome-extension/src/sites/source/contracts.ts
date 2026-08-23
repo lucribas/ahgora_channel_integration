@@ -1,4 +1,8 @@
 import type { CivilDate, ClosingMonth, PunchDay } from '../../domain';
+import type {
+  AhgoraApiCaptureInput,
+  AhgoraApiCaptureResult,
+} from './api-injected';
 
 export interface AhgoraProbeDto {
   readonly titleMatches: boolean;
@@ -35,12 +39,16 @@ export interface FrameExecution<TResult> {
 }
 
 export interface SourceScriptRunner {
-  probe(tabId: number): Promise<readonly FrameExecution<AhgoraProbeDto>[]>;
-  captureMonth(
+  probe?(tabId: number): Promise<readonly FrameExecution<AhgoraProbeDto>[]>;
+  captureMonth?(
     tabId: number,
     frameId: number,
     input: MonthCaptureInput,
   ): Promise<FrameExecution<InjectedMonthCaptureDto>>;
+  capturePeriod?(
+    tabId: number,
+    input: AhgoraApiCaptureInput,
+  ): Promise<AhgoraApiCaptureResult>;
 }
 
 export interface SourceParseWarning {

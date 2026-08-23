@@ -10,6 +10,11 @@ export type IncomingMessage =
   | { readonly type: 'GET_STATE' }
   | { readonly type: 'START_OPERATION'; readonly operationId: string }
   | {
+      readonly type: 'OPEN_LOGIN_PAGES';
+      readonly operationId: string;
+      readonly autoSubmit: boolean;
+    }
+  | {
       readonly type: 'SET_PENDING_ROLE';
       readonly operationId: string;
       readonly role: TabRole;

@@ -27,8 +27,56 @@ export async function captureAhgora(
 ): Promise<CaptureAhgoraResult> {
   if (request.signal?.aborted) return failure('CANCELLED', 'detect', false);
 
+  if (runner.capturePeriod) {
+    const direct = await runner.capturePeriod(request.tabId, {
+      months: request.period.mirrorMonths,
+      ...(request.timeoutMs === undefined
+        ? {}
+        : { timeoutMs: request.timeoutMs }),
+    });
+    if (!direct.ok) {
+      return failure(
+        direct.code === 'login-required'
+          ? 'LOGIN_REQUIRED'
+          : 'SCRIPT_INJECTION_FAILED',
+        direct.code === 'login-required' ? 'detect' : 'parse',
+        true,
+      );
+    }
+    const days = direct.months
+      .flatMap((month) => month.days)
+      .filter(
+        ({ date }) =>
+          compareCivilDates(date, request.period.start) >= 0 &&
+          compareCivilDates(date, request.period.end) <= 0,
+      );
+    const warnings = days.flatMap(({ date, times }) =>
+      times.length % 2 === 0
+        ? []
+        : [{ kind: 'odd-punch-count' as const, date, count: times.length }],
+    );
+    return {
+      ok: true,
+      tabId: request.tabId,
+      frameId: 0,
+      months: direct.months.map(({ month, days: monthDays }) => ({
+        month,
+        days: monthDays,
+        warnings: monthDays.flatMap(({ date, times }) =>
+          times.length % 2 === 0
+            ? []
+            : [{ kind: 'odd-punch-count' as const, date, count: times.length }],
+        ),
+      })),
+      days,
+      warnings,
+      realDomValidation: 'manual-validation-pending',
+    };
+  }
+
   let probes: readonly FrameExecution<AhgoraProbeDto>[];
   try {
+    if (!runner.probe) throw new Error('SOURCE_RUNNER_UNAVAILABLE');
     probes = await runner.probe(request.tabId);
   } catch (error) {
     if (
@@ -73,6 +121,7 @@ export async function captureAhgora(
 
     let execution;
     try {
+      if (!runner.captureMonth) throw new Error('SOURCE_RUNNER_UNAVAILABLE');
       execution = await runner.captureMonth(request.tabId, frameId, {
         month,
         navigationYear: Number(request.today.slice(0, 4)),

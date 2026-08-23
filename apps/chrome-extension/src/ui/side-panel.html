@@ -15,12 +15,52 @@
         <button id="new-operation" type="button">Nova operação</button>
       </header>
 
-      <section class="card" aria-labelledby="tabs-title">
-        <h2 id="tabs-title">1. Registrar abas</h2>
+      <section class="card" aria-labelledby="login-title">
+        <h2 id="login-title">1. Abrir, autenticar e conectar</h2>
         <p class="hint">
+          Abra Ahgora e Channel de uma vez. Se você conceder acesso opcional, a
+          extensão tenta acionar o formulário somente quando o gerenciador de
+          senhas já tiver preenchido os campos; ela não lê nem armazena a senha.
+        </p>
+        <div class="system-progress" aria-label="Progresso dos logins">
+          <div>
+            <div class="progress-heading">
+              <strong>Ahgora</strong>
+              <output id="login-source-state">Não aberto</output>
+            </div>
+            <progress id="login-source-progress" max="100" value="0"></progress>
+            <p id="login-source-detail" class="hint">
+              A página do Ahgora ainda não foi aberta.
+            </p>
+          </div>
+          <div>
+            <div class="progress-heading">
+              <strong>Channel</strong>
+              <output id="login-target-state">Não aberto</output>
+            </div>
+            <progress id="login-target-progress" max="100" value="0"></progress>
+            <p id="login-target-detail" class="hint">
+              A página do Channel ainda não foi aberta.
+            </p>
+          </div>
+        </div>
+        <button id="open-logins" class="primary" type="button">
+          Abrir páginas e tentar login
+        </button>
+        <p id="login-permission-hint" class="hint"></p>
+      </section>
+
+      <section
+        id="manual-registration"
+        class="card"
+        aria-labelledby="tabs-title"
+        hidden
+      >
+        <h2 id="tabs-title">Acesso manual — somente se necessário</h2>
+        <p id="registration-hint" class="hint">
           Escolha um papel, vá até a aba correta e clique no ícone da extensão.
-          Cada aba exige seu próprio gesto. O Ahgora também solicitará acesso ao
-          host exato do iframe do espelho.
+          Cada aba exige seu próprio gesto. As chamadas reutilizam a sessão já
+          autenticada sem acessar senhas ou cookies diretamente.
         </p>
         <div class="tab-row">
           <span>Ahgora</span
@@ -97,12 +137,44 @@
 
       <section class="card" aria-labelledby="progress-title">
         <h2 id="progress-title">3. Estado da operação</h2>
+        <div class="system-progress" aria-label="Progresso da captura">
+          <div>
+            <div class="progress-heading">
+              <strong>Ahgora</strong>
+              <output id="ahgora-progress-state">Aguardando</output>
+            </div>
+            <progress id="ahgora-progress" max="100" value="0"></progress>
+            <p id="ahgora-progress-detail" class="hint">
+              A captura ainda não começou.
+            </p>
+          </div>
+          <div>
+            <div class="progress-heading">
+              <strong>Channel</strong>
+              <output id="channel-progress-state">Aguardando</output>
+            </div>
+            <progress id="channel-progress" max="100" value="0"></progress>
+            <p id="channel-progress-detail" class="hint">
+              A consulta ainda não começou.
+            </p>
+          </div>
+          <div>
+            <div class="progress-heading">
+              <strong>Envio ao Channel</strong>
+              <output id="write-progress-state">Aguardando</output>
+            </div>
+            <progress id="write-progress" max="100" value="0"></progress>
+            <p id="write-progress-detail" class="hint">
+              Selecione os dias que deseja enviar.
+            </p>
+          </div>
+        </div>
         <ol class="steps" aria-label="Etapas">
           <li id="step-captured">Capturado</li>
           <li id="step-validated">Validado</li>
           <li id="step-filled">Preenchido</li>
           <li id="step-confirmed">Confirmado pelo site</li>
-          <li aria-disabled="true">Enviado <small>indisponível</small></li>
+          <li id="step-sent">Enviado pela API</li>
         </ol>
         <output id="operation-status" class="notice" aria-live="polite"
           >Pronto para configurar.</output
@@ -134,25 +206,31 @@
           alterados.
         </p>
         <div id="preview" class="preview" role="list"></div>
-        <div class="actions">
+        <output
+          id="preview-status"
+          class="notice preview-status"
+          aria-live="polite"
+          hidden
+        ></output>
+        <div id="preview-actions" class="actions" hidden>
           <button id="select-remaining" type="button">
             Selecionar restantes
           </button>
           <button id="dry-run" type="button">Executar dry-run</button>
           <button id="apply" class="primary" type="button" disabled>
-            Aplicar selecionados
+            Enviar selecionados
           </button>
           <button id="advance" class="primary" type="button" hidden>
-            Revise/salve no Channel e avançar
+            Continuar após falha
           </button>
           <button id="cancel" class="danger" type="button">
             Cancelar operação
           </button>
         </div>
-        <p class="warning">
-          A extensão nunca clica em Salvar nem envia o formulário. O Channel
-          legado comporta um item; revise e salve manualmente antes de avançar a
-          fila.
+        <p id="send-warning" class="warning" hidden>
+          Um clique envia todos os itens selecionados diretamente ao Channel. Em
+          caso de resposta ambígua, a fila é interrompida para evitar
+          duplicidade.
         </p>
       </section>
     </main>

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const projectRoot = resolve(import.meta.dirname, '../..');
 
 describe('MV3 foundation', () => {
-  it('uses activeTab and only the exact optional host needed by the Ahgora iframe', async () => {
+  it('uses activeTab for operations and only exact optional hosts for login assistance', async () => {
     const manifest = JSON.parse(
       await readFile(resolve(projectRoot, 'manifest.json'), 'utf8'),
     ) as Record<string, unknown>;
@@ -21,7 +21,9 @@ describe('MV3 foundation', () => {
     ]);
     expect(manifest).not.toHaveProperty('host_permissions');
     expect(manifest.optional_host_permissions).toEqual([
-      'https://mirror.app.ahgora.com.br/*',
+      'https://www.ahgora.com.br/*',
+      'https://app.ahgora.com.br/*',
+      'https://channel.certi.org.br/*',
     ]);
     expect(JSON.stringify(manifest)).not.toContain('<all_urls>');
     expect(JSON.stringify(manifest)).not.toContain('cookies');
@@ -42,10 +44,11 @@ describe('MV3 foundation', () => {
     expect(parsed.body.textContent).toContain('Capturar e comparar');
     expect(parsed.body.textContent).toContain('Selecionar restantes');
     expect(parsed.body.textContent).toContain('Executar dry-run');
-    expect(parsed.body.textContent).toContain('Aplicar selecionados');
-    expect(parsed.body.textContent).toContain('Enviado');
-    expect(parsed.body.textContent).toContain('indisponível');
-    expect(parsed.body.textContent).toContain('nunca clica em Salvar');
+    expect(parsed.body.textContent).toContain('Enviar selecionados');
+    expect(parsed.body.textContent).toContain('Enviado pela API');
+    expect(parsed.body.textContent).toContain(
+      'Um clique envia todos os itens selecionados',
+    );
     expect(parsed.querySelector<HTMLInputElement>('#project')?.value).toBe(
       'D15C0401.0 PETROBRAS_SUSTENTAÇÃO CERTIFICARE',
     );

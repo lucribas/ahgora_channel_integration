@@ -13,6 +13,42 @@ export interface RegisteredTab {
   readonly origin: string;
 }
 
+export type SystemProgressStatus = 'waiting' | 'running' | 'done' | 'failed';
+
+export interface SystemProgress {
+  readonly status: SystemProgressStatus;
+  readonly detail: string;
+}
+
+export interface CaptureProgress {
+  readonly ahgora: SystemProgress;
+  readonly channel: SystemProgress;
+}
+
+export type LoginSiteStatus =
+  'idle' | 'opening' | 'awaiting-user' | 'submitted' | 'ready' | 'failed';
+
+export interface LoginPreparation {
+  readonly ahgora: LoginSiteStatus;
+  readonly channel: LoginSiteStatus;
+  readonly ahgoraDetail: string;
+  readonly channelDetail: string;
+  readonly autoSubmit: boolean;
+  readonly permissionDenied?: boolean;
+  readonly sourceTabId?: number;
+  readonly targetTabId?: number;
+}
+
+export type WriteProgressStatus = 'idle' | 'running' | 'done' | 'failed';
+
+export interface WriteProgress {
+  readonly status: WriteProgressStatus;
+  readonly completedItems: number;
+  readonly totalItems: number;
+  readonly currentDate?: CivilDate;
+  readonly detail: string;
+}
+
 export interface OperationConfig {
   readonly project: string;
   readonly activity: string;
@@ -61,6 +97,9 @@ export interface OperationData {
   readonly inFlight?: 'capture' | 'apply' | 'advance' | undefined;
   readonly sourceTab?: RegisteredTab | undefined;
   readonly targetTab?: RegisteredTab | undefined;
+  readonly loginPreparation?: LoginPreparation;
+  readonly captureProgress?: CaptureProgress;
+  readonly writeProgress?: WriteProgress;
   readonly config?: OperationConfig;
   readonly resolvedPeriod?: ResolvedPeriod;
   readonly sourceRows?: readonly ComparableWorkRecord[];
@@ -99,6 +138,13 @@ export function emptyOperation(operationId: string): OperationData {
     items: [],
     queue: [],
     queueIndex: 0,
+    loginPreparation: {
+      ahgora: 'idle',
+      channel: 'idle',
+      ahgoraDetail: 'A página do Ahgora ainda não foi aberta.',
+      channelDetail: 'A página do Channel ainda não foi aberta.',
+      autoSubmit: false,
+    },
   };
 }
 
@@ -117,7 +163,10 @@ export function operationTotals(state: OperationData): OperationTotals {
   );
   const reviewable = state.items.flatMap((item) => {
     const minutes = sourceByDate.get(item.date)?.durationMinutes;
-    return item.status === 'missing' && minutes !== undefined && minutes > 0
+    return item.status === 'missing' &&
+      item.result === undefined &&
+      minutes !== undefined &&
+      minutes > 0
       ? [{ item, minutes }]
       : [];
   });

@@ -15,6 +15,7 @@ import {
 } from '../../src/domain';
 import {
   captureAhgora,
+  captureAhgoraByApi,
   captureAhgoraMonthInDocument,
   probeAhgoraDocument,
   type AhgoraProbeDto,
@@ -24,6 +25,8 @@ import {
   type SourceScriptRunner,
 } from '../../src/sites/source';
 import {
+  runInjectedChannelApiRead,
+  runInjectedChannelApiWrite,
   runInjectedChannelFill,
   runInjectedChannelRead,
   type InjectedChannelFillInput,
@@ -32,6 +35,131 @@ import {
 const runAuthenticated = process.env.RUN_AUTHENTICATED_SMOKE === '1';
 
 describe.runIf(runAuthenticated)('sites autenticados, sem submissão', () => {
+  it('recupera o contexto do Channel pelo Extrato quando a página registrada não o expõe', async () => {
+    const config = authenticatedConfig();
+    const browser = await chromium.launch({
+      channel: 'chrome',
+      headless: true,
+    });
+    const context = await browser.newContext();
+    const channel = await context.newPage();
+    try {
+      await loginChannel(channel, config);
+      await safeNavigate(
+        channel,
+        config.channelExtractUrl,
+        'CHANNEL_EXTRACT_NAVIGATION_FAILED',
+      );
+      await channel
+        .locator('#totalItensPagina')
+        .waitFor({ state: 'visible', timeout: 30_000 });
+      let extractGets = 0;
+      let dwrReads = 0;
+      channel.on('request', (request) => {
+        const url = new URL(request.url());
+        if (
+          request.method() === 'GET' &&
+          url.pathname === '/channel/apontamento.do' &&
+          url.searchParams.get('action') === 'listarDatas'
+        )
+          extractGets++;
+        if (
+          request.method() === 'POST' &&
+          url.pathname.endsWith('/ApontamentoAjax.listarApontamentoPorData.dwr')
+        )
+          dwrReads++;
+      });
+      await channel.evaluate(() => {
+        document.querySelector('#participanteSelecionado')?.remove();
+        (
+          globalThis as typeof globalThis & {
+            ID_EMPRESA?: string | number;
+          }
+        ).ID_EMPRESA = '';
+      });
+      const period = authenticatedPeriod(config, localToday());
+      const result = await channel.evaluate(runInjectedChannelApiRead, {
+        startDate: formatBrazilianDate(period.start),
+        endDate: formatBrazilianDate(period.end),
+        timeoutMs: 30_000,
+      });
+
+      if (!result.ok) throw new Error(`CHANNEL_CONTEXT_${result.code}`);
+      expect(extractGets).toBeGreaterThanOrEqual(1);
+      expect(dwrReads).toBeGreaterThanOrEqual(1);
+    } finally {
+      await context.close();
+      await browser.close();
+    }
+  });
+
+  it('usa as APIs reais do Ahgora e Channel sem navegar por controles nem gravar no smoke', async () => {
+    const config = authenticatedConfig();
+    const browser = await chromium.launch({
+      channel: 'chrome',
+      headless: true,
+    });
+    const context = await browser.newContext();
+    const ahgora = await context.newPage();
+    const channel = await context.newPage();
+    try {
+      await loginAhgora(ahgora, config);
+      const period = authenticatedPeriod(config, localToday());
+      const source = await ahgora.evaluate(captureAhgoraByApi, {
+        months: period.mirrorMonths,
+        timeoutMs: 30_000,
+      });
+      if (!source.ok) throw new Error(`AHGORA_API_${source.code}`);
+      expect(source.months.length).toBe(period.mirrorMonths.length);
+
+      await loginChannel(channel, config);
+      await safeNavigate(
+        channel,
+        config.channelExtractUrl,
+        'CHANNEL_EXTRACT_NAVIGATION_FAILED',
+      );
+      await channel
+        .locator('#totalItensPagina')
+        .waitFor({ state: 'visible', timeout: 30_000 });
+      const target = await channel.evaluate(runInjectedChannelApiRead, {
+        startDate: formatBrazilianDate(period.start),
+        endDate: formatBrazilianDate(period.end),
+        timeoutMs: 30_000,
+      });
+      if (!target.ok) throw new Error(`CHANNEL_API_READ_${target.code}`);
+
+      let channelWrites = 0;
+      channel.on('request', (request) => {
+        const url = new URL(request.url());
+        if (
+          request.method() === 'POST' &&
+          url.pathname === '/channel/apontamento.do'
+        )
+          channelWrites++;
+      });
+      const prepared = await channel.evaluate(runInjectedChannelApiWrite, {
+        kind: 'PROJETOS',
+        project: config.project,
+        activityType: config.activityType,
+        activity: config.activity,
+        task: config.task,
+        date: localToday(),
+        duration: '00:01',
+        durationMinutes: 1,
+        timeoutMs: 30_000,
+        commit: false,
+      } satisfies InjectedChannelFillInput & { readonly commit: false });
+      if (prepared.status !== 'filled')
+        throw new Error(
+          `CHANNEL_API_WRITE_PREP_${prepared.status}_${prepared.code ?? 'NO_CODE'}`,
+        );
+      expect(channelWrites).toBe(0);
+    } finally {
+      await context.close();
+      await browser.close();
+    }
+  });
+
   it('captura, compara e prepara no máximo um item sem persistir no Channel', async () => {
     const config = authenticatedConfig();
     const browser = await chromium.launch({
@@ -294,9 +422,8 @@ async function loginAhgora(
   config: AuthenticatedConfig,
 ): Promise<void> {
   const form = page.locator('#boxLogin');
-  let ready = false;
-  for (let attempt = 0; attempt < 3 && !ready; attempt++) {
-    ready = await safeNavigate(
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const ready = await safeNavigate(
       page,
       config.ahgoraLoginUrl,
       'AHGORA_LOGIN_NAVIGATION_FAILED',
@@ -308,14 +435,17 @@ async function loginAhgora(
           .catch(() => false),
       )
       .catch(() => false);
+    if (!ready) continue;
+    await form.locator('[name="matricula"]').fill(config.ahgoraRegistration);
+    await form.locator('[name="senha"]').fill(config.ahgoraPassword);
+    await form.locator('[name="senha"]').press('Enter');
+    const confirmed = await form
+      .waitFor({ state: 'hidden', timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (confirmed) return;
   }
-  if (!ready) throw new Error('AHGORA_LOGIN_FORM_NOT_FOUND');
-  await form.locator('[name="matricula"]').fill(config.ahgoraRegistration);
-  await form.locator('[name="senha"]').fill(config.ahgoraPassword);
-  await form.locator('[name="senha"]').press('Enter');
-  await form.waitFor({ state: 'hidden', timeout: 60_000 }).catch(() => {
-    throw new Error('AHGORA_LOGIN_NOT_CONFIRMED');
-  });
+  throw new Error('AHGORA_LOGIN_NOT_CONFIRMED');
 }
 
 async function loginChannel(
@@ -323,9 +453,8 @@ async function loginChannel(
   config: AuthenticatedConfig,
 ): Promise<void> {
   const form = page.locator('#loginForm');
-  let ready = false;
-  for (let attempt = 0; attempt < 3 && !ready; attempt++) {
-    ready = await safeNavigate(
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const ready = await safeNavigate(
       page,
       config.channelLoginUrl,
       'CHANNEL_LOGIN_NAVIGATION_FAILED',
@@ -337,14 +466,17 @@ async function loginChannel(
           .catch(() => false),
       )
       .catch(() => false);
+    if (!ready) continue;
+    await form.locator('[name="username"]').fill(config.channelUsername);
+    await form.locator('[name="password"]').fill(config.channelPassword);
+    await form.locator('[name="password"]').press('Enter');
+    const confirmed = await form
+      .waitFor({ state: 'hidden', timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (confirmed) return;
   }
-  if (!ready) throw new Error('CHANNEL_LOGIN_FORM_NOT_FOUND');
-  await form.locator('[name="username"]').fill(config.channelUsername);
-  await form.locator('[name="password"]').fill(config.channelPassword);
-  await form.locator('[name="password"]').press('Enter');
-  await form.waitFor({ state: 'hidden', timeout: 60_000 }).catch(() => {
-    throw new Error('CHANNEL_LOGIN_NOT_CONFIRMED');
-  });
+  throw new Error('CHANNEL_LOGIN_NOT_CONFIRMED');
 }
 
 async function safeNavigate(

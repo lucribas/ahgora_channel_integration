@@ -6,6 +6,7 @@ type UnknownRecord = Record<string, unknown>;
 const MESSAGE_TYPES = new Set<IncomingMessage['type']>([
   'GET_STATE',
   'START_OPERATION',
+  'OPEN_LOGIN_PAGES',
   'SET_PENDING_ROLE',
   'REGISTER_ACTIVE_TAB',
   'CAPTURE_AND_COMPARE',
@@ -40,6 +41,8 @@ export function isIncomingMessage(value: unknown): value is IncomingMessage {
   if (value.type === 'GET_STATE') return true;
   if (!isOperationId(value.operationId)) return false;
   switch (value.type) {
+    case 'OPEN_LOGIN_PAGES':
+      return typeof value.autoSubmit === 'boolean';
     case 'SET_PENDING_ROLE':
     case 'REGISTER_ACTIVE_TAB':
       return isTabRole(value.role);

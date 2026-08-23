@@ -144,6 +144,36 @@ small {
   padding: 0;
   list-style: none;
 }
+.system-progress {
+  display: grid;
+  gap: 0.55rem;
+}
+.system-progress > div {
+  border: 1px solid #d2dce2;
+  border-radius: 0.45rem;
+  background: #f7fafb;
+  padding: 0.55rem;
+}
+.progress-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.progress-heading output {
+  color: #516572;
+  font-size: 0.82rem;
+}
+progress {
+  width: 100%;
+  height: 0.8rem;
+  accent-color: #1675a9;
+}
+progress.failed {
+  accent-color: #9a3030;
+}
+.system-progress .hint {
+  margin: 0.25rem 0 0;
+}
 .steps li {
   border-left: 4px solid #9eabb3;
   padding: 0.25rem 0.4rem;
@@ -161,6 +191,21 @@ small {
   border-radius: 0.45rem;
   background: #f2f8fb;
   padding: 0.6rem;
+}
+.notice.success {
+  border-color: #70a97e;
+  background: #e8f6ec;
+  color: #145d2c;
+}
+.notice.error {
+  border-color: #c98282;
+  background: #fcecec;
+  color: #7d2020;
+}
+.notice.running {
+  border-color: #71a7c5;
+  background: #eaf5fb;
+  color: #174f6d;
 }
 .section-heading {
   display: flex;
@@ -200,6 +245,28 @@ small {
   border: 1px solid #d2dce2;
   border-radius: 0.45rem;
   padding: 0.55rem;
+}
+.item.readonly {
+  grid-template-columns: 1fr;
+}
+.item.status-success {
+  border-color: #83b68f;
+  background: #eaf7ed;
+}
+.item.status-updatable {
+  border-color: #83b7d2;
+  background: #edf7fc;
+}
+.item.status-divergent {
+  border-color: #d0a64c;
+  background: #fff6dc;
+}
+.item.status-error {
+  border-color: #ce8585;
+  background: #fcecec;
+}
+.item.status-neutral {
+  background: #f3f5f6;
 }
 .item p {
   margin: 0;

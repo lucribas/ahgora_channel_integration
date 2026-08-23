@@ -10,6 +10,7 @@ import {
 } from '../../src/domain';
 import {
   captureAhgora,
+  captureAhgoraByApi,
   captureAhgoraMonthInDocument,
   parseMirrorCalendarText,
   probeAhgoraDocument,
@@ -25,9 +26,63 @@ afterEach(() => {
   document.head.replaceChildren();
   document.body.replaceChildren();
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('Ahgora injected document functions', () => {
+  it('repete GET seguro após falha transitória e conclui a captura da API', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new TypeError('network unavailable'))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ meses: { '2026-08': { referencia: 'ref' } } }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            dias: {
+              '2026-08-20': {
+                batidas: [{ hora: '08:00' }, { hora: '12:00' }],
+              },
+            },
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+    const capture = captureAhgoraByApi({
+      months: ['2026-08'],
+      timeoutMs: 1_000,
+    });
+    await vi.advanceTimersByTimeAsync(250);
+
+    await expect(capture).resolves.toMatchObject({
+      ok: true,
+      months: [
+        {
+          month: '2026-08',
+          days: [{ date: '2026-08-20', times: ['08:00', '12:00'] }],
+        },
+      ],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('não repete uma resposta de autenticação recusada', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('', { status: 401 }));
+
+    await expect(
+      captureAhgoraByApi({ months: ['2026-08'], timeoutMs: 1_000 }),
+    ).resolves.toEqual({ ok: false, code: 'login-required' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('detects only the page, login and mirror evidence present in the active Ruby', () => {
     document.title = 'Portal Ahgora';
     document.body.innerHTML =
@@ -176,6 +231,35 @@ describe('Ahgora textual calendar parser', () => {
 });
 
 describe('Ahgora source adapter', () => {
+  it('prefere a API direta e não consulta frames quando ela está disponível', async () => {
+    const probe = vi.fn();
+    const runner: SourceScriptRunner = {
+      probe,
+      capturePeriod: (_tabId, input) =>
+        Promise.resolve({
+          ok: true,
+          months: input.months.map((month) => ({
+            month,
+            days: [
+              {
+                date: civilDate('2026-08-18'),
+                times: ['08:00', '12:00', '13:00', '17:00'],
+              },
+            ],
+          })),
+        }),
+    };
+
+    const result = await captureAhgora(runner, {
+      tabId: 42,
+      today: civilDate('2026-08-22'),
+      period: resolvePeriod(monthPeriod('2026-08'), fixedClock('2026-08-22')),
+    });
+
+    expect(result).toMatchObject({ ok: true, frameId: 0 });
+    expect(probe).not.toHaveBeenCalled();
+  });
+
   it('captures all required mirror months and filters an inclusive range', async () => {
     const runner = new SyntheticRunner({
       '2026-08': makeMirrorCalendarText('2026-08', {

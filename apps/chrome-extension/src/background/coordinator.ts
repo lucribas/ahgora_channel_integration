@@ -1,4 +1,9 @@
-import type { OperationData, PreviewItem } from '../application/types';
+import type {
+  CaptureProgress,
+  OperationData,
+  PreviewItem,
+  WriteProgress,
+} from '../application/types';
 import {
   assignExpertProject,
   calculatePunchDays,
@@ -32,6 +37,11 @@ export interface CoordinatorAdapters {
     state: OperationData,
     assignment: ProjectAssignment,
   ): Promise<InjectedChannelFillResult>;
+  reportCaptureProgress?(progress: CaptureProgress): Promise<void>;
+  reportWriteProgress?(
+    state: OperationData,
+    progress: WriteProgress,
+  ): Promise<void>;
 }
 
 export async function captureAndCompareOperation(
@@ -46,8 +56,26 @@ export async function captureAndCompareOperation(
   const period = resolvePeriod(state.config.period, {
     today: () => adapters.today,
   });
+  let progress: CaptureProgress = {
+    ahgora: {
+      status: 'running',
+      detail: `Consultando ${String(period.mirrorMonths.length)} mês(es) do espelho…`,
+    },
+    channel: {
+      status: 'waiting',
+      detail: 'Aguardando a captura do Ahgora.',
+    },
+  };
+  await adapters.reportCaptureProgress?.(progress);
   const source = await adapters.captureSource(state.sourceTab.id, period);
-  if (!source.ok) throw new Error(source.error.message);
+  if (!source.ok) {
+    progress = {
+      ...progress,
+      ahgora: { status: 'failed', detail: source.error.message },
+    };
+    await adapters.reportCaptureProgress?.(progress);
+    throw new Error(source.error.message);
+  }
   const calculation = calculatePunchDays(source.days, state.config.overrides);
   const sourceRows: readonly ComparableWorkRecord[] = calculation.records.map(
     ({ date, duration, durationMinutes }) => ({
@@ -56,14 +84,41 @@ export async function captureAndCompareOperation(
       durationMinutes,
     }),
   );
+  progress = {
+    ahgora: {
+      status: 'done',
+      detail: `${String(source.days.length)} dia(s) recebido(s); ${String(calculation.records.length)} com duração calculada.`,
+    },
+    channel: {
+      status: 'running',
+      detail: 'Resolvendo sessão e consultando o Extrato via DWR…',
+    },
+  };
+  await adapters.reportCaptureProgress?.(progress);
   const targetResult = await adapters.readTarget(state.targetTab.id, {
     startDate: formatBrazilianDate(period.start),
     endDate: formatBrazilianDate(period.end),
   });
   if (!targetResult.ok) {
+    progress = {
+      ...progress,
+      channel: {
+        status: 'failed',
+        detail: channelReadFailureMessage(targetResult.code),
+      },
+    };
+    await adapters.reportCaptureProgress?.(progress);
     throw new Error(channelReadFailureMessage(targetResult.code));
   }
   const targetRows = comparableRows(targetResult);
+  progress = {
+    ...progress,
+    channel: {
+      status: 'done',
+      detail: `${String(targetRows.length)} linha(s) recebida(s) do Extrato.`,
+    },
+  };
+  await adapters.reportCaptureProgress?.(progress);
   const comparisons = compareAhgoraWithChannel(sourceRows, targetRows);
   const warningDates = new Set(
     calculation.warnings.map((warning) => warning.date),
@@ -107,6 +162,7 @@ export async function captureAndCompareOperation(
     resolvedPeriod: period,
     sourceRows,
     targetRows,
+    captureProgress: progress,
     items,
     queue: [],
     queueIndex: 0,
@@ -121,6 +177,12 @@ function channelReadFailureMessage(code: string): string {
         'entry-form-open':
           'O formulário de apontamento está aberto no Channel. Feche ou cancele o formulário, abra o Extrato e tente novamente.',
         'login-required': 'Conclua o login do Channel e tente novamente.',
+        'channel-api-unavailable':
+          'A aba Channel não carregou o cliente DWR do Extrato. Abra o Extrato nessa aba e registre-a novamente.',
+        'channel-participant-unavailable':
+          'O Channel não informou o participante nem na página atual nem no Extrato autenticado. Reabra o Extrato e refaça o login.',
+        'channel-company-unavailable':
+          'O Channel não informou a empresa nem na página atual nem no Extrato autenticado. Reabra o Extrato e registre a aba novamente.',
         'not-channel-page':
           'A aba registrada não está no Extrato do Channel. Abra o Extrato nessa aba e tente novamente.',
         'no-pagination-option-not-found':
@@ -176,6 +238,13 @@ export function prepareSelectedQueue(state: OperationData): OperationData {
     ),
     queue,
     queueIndex: 0,
+    writeProgress: {
+      status: 'running',
+      completedItems: 0,
+      totalItems: queue.length,
+      detail: `Preparando ${String(queue.length)} apontamento(s) para envio ao Channel.`,
+    },
+    message: `Preparando ${String(queue.length)} apontamento(s) para envio ao Channel.`,
   };
 }
 
@@ -209,7 +278,7 @@ export async function fillCurrentQueueItem(
     return {
       ...state,
       phase: 'completed',
-      message: 'Fila classificada. A extensão não enviou formulários.',
+      message: 'Todos os apontamentos selecionados foram processados.',
     };
   }
   const itemId = state.queue[state.queueIndex];
@@ -244,6 +313,7 @@ export async function fillCurrentQueueItem(
       existing.duration === record.duration
         ? 'O item já está correto no extrato. Revise e avance.'
         : 'O Channel agora contém duração divergente; nenhum campo foi alterado.',
+      existing.duration,
     );
   }
 
@@ -254,13 +324,84 @@ export async function fillCurrentQueueItem(
   return {
     ...state,
     items: state.items.map((item) =>
-      item.id === itemId ? { ...item, result: result.status } : item,
+      item.id === itemId
+        ? {
+            ...item,
+            result: result.status,
+            ...(recognized
+              ? {
+                  status: 'equal' as const,
+                  channelDuration: assignment.duration,
+                }
+              : {}),
+          }
+        : item,
     ),
     phase: recognized ? 'waiting-review' : 'partial',
     message: recognized
-      ? 'Um item foi reconhecido no formulário. Revise e salve manualmente no Channel; depois avance.'
-      : 'O item não foi preenchido. A fila está parcial; revise o Channel antes de avançar.',
+      ? 'Apontamento confirmado pelo Channel.'
+      : 'O apontamento não foi confirmado. A fila foi interrompida para evitar duplicidade.',
   };
+}
+
+export async function fillSelectedQueue(
+  initial: OperationData,
+  adapters: CoordinatorAdapters,
+): Promise<OperationData> {
+  let current = initial;
+  while (current.queueIndex < current.queue.length) {
+    const itemId = current.queue[current.queueIndex];
+    if (itemId === undefined) throw new Error('Posição inválida na fila.');
+    const position = current.queueIndex + 1;
+    let progress: WriteProgress = {
+      status: 'running',
+      completedItems: current.queueIndex,
+      totalItems: current.queue.length,
+      currentDate: civilDate(itemId),
+      detail: `Revalidando ${formatBrazilianDate(civilDate(itemId))} no Channel (${String(position)} de ${String(current.queue.length)})…`,
+    };
+    current = { ...current, writeProgress: progress, message: progress.detail };
+    await adapters.reportWriteProgress?.(current, progress);
+    const written = await fillCurrentQueueItem(current, adapters);
+    if (written.phase === 'partial') {
+      progress = {
+        ...progress,
+        status: 'failed',
+        detail: `Envio interrompido em ${formatBrazilianDate(civilDate(itemId))}: ${written.message ?? 'o Channel não confirmou o apontamento.'}`,
+      };
+      const failed = { ...written, writeProgress: progress };
+      await adapters.reportWriteProgress?.(failed, progress);
+      return failed;
+    }
+    progress = {
+      status: 'running',
+      completedItems: position,
+      totalItems: current.queue.length,
+      currentDate: civilDate(itemId),
+      detail: `${formatBrazilianDate(civilDate(itemId))} enviado e confirmado (${String(position)} de ${String(current.queue.length)}).`,
+    };
+    const confirmed = {
+      ...written,
+      writeProgress: progress,
+      message: progress.detail,
+    };
+    await adapters.reportWriteProgress?.(confirmed, progress);
+    current = advanceQueue(confirmed);
+  }
+  const completed = await fillCurrentQueueItem(current, adapters);
+  const progress: WriteProgress = {
+    status: 'done',
+    completedItems: current.queue.length,
+    totalItems: current.queue.length,
+    detail: `${String(current.queue.length)} de ${String(current.queue.length)} apontamento(s) enviado(s) e confirmado(s) pelo Channel.`,
+  };
+  const result = {
+    ...completed,
+    writeProgress: progress,
+    message: progress.detail,
+  };
+  await adapters.reportWriteProgress?.(result, progress);
+  return result;
 }
 
 export function advanceQueue(state: OperationData): OperationData {
@@ -300,11 +441,30 @@ function itemResult(
   itemId: string,
   result: NonNullable<PreviewItem['result']>,
   message: string,
+  channelDuration?: string,
 ): OperationData {
   return {
     ...state,
     items: state.items.map((item) =>
-      item.id === itemId ? { ...item, result } : item,
+      item.id === itemId
+        ? {
+            ...item,
+            result,
+            ...(result === 'already-correct'
+              ? {
+                  status: 'equal' as const,
+                  ...(channelDuration === undefined ? {} : { channelDuration }),
+                }
+              : result === 'validation-error'
+                ? {
+                    status: 'divergent' as const,
+                    ...(channelDuration === undefined
+                      ? {}
+                      : { channelDuration }),
+                  }
+                : {}),
+          }
+        : item,
     ),
     phase: result === 'already-correct' ? 'waiting-review' : 'partial',
     message,

@@ -1,4 +1,8 @@
 export { executeChannelFill, executeChannelRead } from './chrome-runner';
+export {
+  runInjectedChannelApiRead,
+  runInjectedChannelApiWrite,
+} from './api-injected';
 export { detectChannelPage, type ChannelPageState } from './detection';
 export {
   runInjectedChannelFill,

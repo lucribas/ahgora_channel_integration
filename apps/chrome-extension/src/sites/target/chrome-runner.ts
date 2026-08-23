@@ -4,23 +4,26 @@ import type {
   InjectedChannelReadInput,
   InjectedChannelReadResult,
 } from './injected';
-import { runInjectedChannelFill, runInjectedChannelRead } from './injected';
+import {
+  runInjectedChannelApiRead,
+  runInjectedChannelApiWrite,
+} from './api-injected';
 
 export async function executeChannelRead(
   tabId: number,
   input: InjectedChannelReadInput,
 ): Promise<InjectedChannelReadResult> {
-  const runtimeInput = { ...input, timeoutMs: input.timeoutMs ?? 30_000 };
   const [execution] = await chrome.scripting.executeScript({
     target: { tabId },
-    func: runInjectedChannelRead,
-    args: [runtimeInput],
+    world: 'MAIN',
+    func: runInjectedChannelApiRead,
+    args: [{ ...input, timeoutMs: input.timeoutMs ?? 30_000 }],
   });
   const result = execution?.result ?? {
     ok: false as const,
     code: 'missing-execution-result',
   };
-  console.info('[AhgoraChannel][ChannelReadRunner]', {
+  console.info('[AhgoraChannel][ChannelApiReadRunner]', {
     status: result.ok ? 'ok' : 'failed',
     tabId,
     hasExecution: execution !== undefined,
@@ -35,11 +38,11 @@ export async function executeChannelFill(
   tabId: number,
   input: InjectedChannelFillInput,
 ): Promise<InjectedChannelFillResult> {
-  const runtimeInput = { ...input, timeoutMs: input.timeoutMs ?? 30_000 };
   const [execution] = await chrome.scripting.executeScript({
     target: { tabId },
-    func: runInjectedChannelFill,
-    args: [runtimeInput],
+    world: 'MAIN',
+    func: runInjectedChannelApiWrite,
+    args: [{ ...input, timeoutMs: input.timeoutMs ?? 30_000, commit: true }],
   });
   const result = execution?.result ?? {
     date: input.date,
@@ -47,7 +50,7 @@ export async function executeChannelFill(
     status: 'failed',
     code: 'missing-execution-result',
   };
-  console.info('[AhgoraChannel][ChannelFillRunner]', {
+  console.info('[AhgoraChannel][ChannelApiWriteRunner]', {
     status: result.status,
     code: result.code,
     tabId,

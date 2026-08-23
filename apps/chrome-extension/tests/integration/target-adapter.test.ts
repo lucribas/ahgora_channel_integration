@@ -12,6 +12,8 @@ import {
   readChannelExtract,
   runInjectedChannelFill,
   runInjectedChannelRead,
+  runInjectedChannelApiRead,
+  runInjectedChannelApiWrite,
   waitForCondition,
 } from '../../src/sites/target';
 
@@ -49,7 +51,233 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+describe('API direta do Channel', () => {
+  it('consulta o extrato via DWR sem clicar nem alterar os filtros', async () => {
+    document.body.innerHTML = `
+      <input id="participanteSelecionado" value="synthetic-user">
+      <select id="totalItensPagina"><option value="999999">Não paginar</option></select>
+    `;
+    const listarApontamentoPorData = vi.fn((...args: unknown[]) =>
+      (args.at(-1) as (value: unknown) => void)({
+        lista: [
+          {
+            dataFormatada: '18/08/2026',
+            totalDuracao: 8.85,
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('ID_EMPRESA', 'synthetic-company');
+    vi.stubGlobal('ApontamentoAjax', { listarApontamentoPorData });
+
+    const result = await runInjectedChannelApiRead({
+      startDate: '18/08/2026',
+      endDate: '18/08/2026',
+      timeoutMs: 100,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      rows: [
+        {
+          rowIndex: 0,
+          date: '2026-08-18',
+          duration: '08:51',
+          durationMinutes: 531,
+        },
+      ],
+      errors: [],
+    });
+    expect(listarApontamentoPorData).toHaveBeenCalledTimes(1);
+  });
+
+  it('recupera participante e empresa pelo GET autenticado do Extrato antes do DWR', async () => {
+    const listarApontamentoPorData = vi.fn((...args: unknown[]) =>
+      (args.at(-1) as (value: unknown) => void)({
+        lista: [{ dataFormatada: '18/08/2026', totalDuracao: 7.5 }],
+      }),
+    );
+    vi.stubGlobal('ApontamentoAjax', { listarApontamentoPorData });
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          `<!doctype html>
+          <input id="participanteSelecionado" value="synthetic-user">
+          <script>var ID_EMPRESA = 321;</script>`,
+          { status: 200, headers: { 'Content-Type': 'text/html' } },
+        ),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runInjectedChannelApiRead({
+      startDate: '18/08/2026',
+      endDate: '18/08/2026',
+      timeoutMs: 100,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      rows: [{ date: '2026-08-18', duration: '07:30' }],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/channel/apontamento.do?action=listarDatas&retorno=painel',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+    expect(listarApontamentoPorData).toHaveBeenCalledTimes(1);
+    expect(listarApontamentoPorData.mock.calls[0]?.[0]).toMatchObject({
+      usuario: 'synthetic-user',
+      empresa: '321',
+    });
+  });
+
+  it('prepara o POST com tokens e IDs retornados pelas APIs sem gravar no smoke', async () => {
+    const html = `<!doctype html><form name="apontamentoForm" action="/channel/apontamento.do" method="post">
+      <input type="hidden" name="org.apache.struts.taglib.html.TOKEN" value="synthetic-token">
+      <input type="hidden" name="participanteSelecionado" value="synthetic-user">
+      <input type="hidden" name="action" value="">
+      <input type="hidden" name="key" value="">
+      <input id="tpApontamentoProjeto" type="radio" name="tipoApontamento" value="0">
+      <select id="apontamento.idTipoAtividadeProjeto" name="apontamento.idTipoAtividadeProjeto"><option value="0">Nenhum</option></select>
+      <select id="apontamento.idTarefa" name="apontamento.idTarefa"><option value="-1">Nenhum</option></select>
+      <input name="data"><input name="apontamento.duracao">
+    </form>`;
+    const callback =
+      (value: unknown) =>
+      (...args: unknown[]): void =>
+        (args.at(-1) as (result: unknown) => void)(value);
+    vi.stubGlobal('ID_EMPRESA', 'synthetic-company');
+    vi.stubGlobal('ApontamentoAjax', {
+      listarApontamentoPorData: callback({ lista: [] }),
+      isStaff: callback(false),
+      getAtividadesByProjeto: callback([
+        { id: 22, nome: 'ATIVIDADE_SINTETICA' },
+      ]),
+      getTarefasByAtividade: callback([]),
+    });
+    vi.stubGlobal('ProjetoAjax', {
+      listarPorUsuarioAreaApontamento: callback([
+        { id: 11, codigo: 'P', nome: 'PROJETO_SINTETICO' },
+      ]),
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return Promise.resolve(
+        new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runInjectedChannelApiWrite({
+      kind: 'PROJETOS',
+      project: 'PROJETO_SINTETICO',
+      activityType: 'Nenhum',
+      activity: 'ATIVIDADE_SINTETICA',
+      task: 'Nenhum',
+      date: '2026-08-18',
+      duration: '07:30',
+      durationMinutes: 450,
+      timeoutMs: 100,
+      commit: false,
+    });
+
+    expect(result).toMatchObject({ status: 'filled', resultingMinutes: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      credentials: 'include',
+    });
+  });
+
+  it('envia um POST e só conclui depois que o extrato confirma a duração', async () => {
+    const html = `<!doctype html><form name="apontamentoForm" action="/channel/apontamento.do" method="post">
+      <input type="hidden" name="org.apache.struts.taglib.html.TOKEN" value="synthetic-token">
+      <input type="hidden" name="participanteSelecionado" value="synthetic-user">
+      <input type="hidden" name="action"><input type="hidden" name="key">
+      <input id="tpApontamentoProjeto" type="radio" name="tipoApontamento" value="0">
+      <select id="apontamento.idTipoAtividadeProjeto" name="apontamento.idTipoAtividadeProjeto"><option value="0">Nenhum</option></select>
+      <select id="apontamento.idTarefa" name="apontamento.idTarefa"><option value="-1">Nenhum</option></select>
+      <input name="data"><input name="apontamento.duracao">
+    </form>`;
+    const callback =
+      (value: unknown) =>
+      (...args: unknown[]): void =>
+        (args.at(-1) as (result: unknown) => void)(value);
+    let reads = 0;
+    vi.stubGlobal('ID_EMPRESA', 'synthetic-company');
+    vi.stubGlobal('ApontamentoAjax', {
+      listarApontamentoPorData: (...args: unknown[]) => {
+        reads++;
+        (args.at(-1) as (result: unknown) => void)(
+          reads === 1
+            ? { lista: [] }
+            : {
+                lista: [{ dataFormatada: '18/08/2026', totalDuracao: 7.5 }],
+              },
+        );
+      },
+      isStaff: callback(false),
+      getAtividadesByProjeto: callback([
+        { id: 22, nome: 'ATIVIDADE_SINTETICA' },
+      ]),
+      getTarefasByAtividade: callback([]),
+    });
+    vi.stubGlobal('ProjetoAjax', {
+      listarPorUsuarioAreaApontamento: callback([
+        { id: 11, nome: 'PROJETO_SINTETICO' },
+      ]),
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      return Promise.resolve(
+        new Response(init?.method === 'POST' ? 'saved' : html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runInjectedChannelApiWrite({
+      kind: 'PROJETOS',
+      project: 'PROJETO_SINTETICO',
+      activityType: 'Nenhum',
+      activity: 'ATIVIDADE_SINTETICA',
+      task: 'Nenhum',
+      date: '2026-08-18',
+      duration: '07:30',
+      durationMinutes: 450,
+      timeoutMs: 100,
+    });
+
+    expect(result).toMatchObject({
+      status: 'filled',
+      resultingMinutes: 450,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const post = fetchMock.mock.calls[1];
+    expect(post?.[1]).toMatchObject({ method: 'POST' });
+    const body = post?.[1]?.body;
+    expect(body).toBeInstanceOf(URLSearchParams);
+    expect((body as URLSearchParams).get('action')).toBe('salvar');
+    expect(
+      (body as URLSearchParams).get('apontamento.projetosSelecionado'),
+    ).toBe('11');
+    expect(
+      (body as URLSearchParams).get('apontamento.notificacaoSelecionada'),
+    ).toBe('22');
+    expect((body as URLSearchParams).get('data')).toBe('18/08/2026');
+    expect((body as URLSearchParams).get('apontamento.duracao')).toBe('07:30');
+  });
+});
 
 describe('adapter Channel de leitura', () => {
   it('detecta login, extrato, formulário e página desconhecida pelos seletores Ruby', async () => {

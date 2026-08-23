@@ -1,6 +1,6 @@
 # Extensão Ahgora para Channel
 
-Extensão Chrome Manifest V3 que usa abas já autenticadas para capturar o espelho Ahgora, comparar o extrato Channel e preparar lançamentos `PROJETOS` para revisão. Ela não solicita credenciais, não envia formulários e não substitui a conferência humana.
+Extensão Chrome Manifest V3 que reutiliza as sessões de abas já autenticadas para consultar as APIs do Ahgora e do Channel, comparar os dados e enviar lançamentos `PROJETOS` selecionados. Ela não solicita nem armazena credenciais.
 
 ## Instalação e comandos
 
@@ -8,35 +8,37 @@ Requisitos: Node.js 24 LTS, npm 11+ e Chrome/Chromium 116+. Ruby 3 é usado apen
 
 Execute em `apps/chrome-extension`:
 
-| Ordem | Finalidade                            | Comando exato                |
-| ----: | ------------------------------------- | ---------------------------- |
-|     1 | Instalação imutável                   | `npm ci`                     |
-|     2 | Chromium do e2e                       | `npm run e2e:install`        |
-|     3 | Desenvolvimento (encerrar com Ctrl+C) | `npm run dev`                |
-|     4 | Typecheck                             | `npm run typecheck`          |
-|     5 | Lint/formato                          | `npm run lint`               |
-|     6 | Unitários                             | `npm run test:unit`          |
-|     7 | Paridade Ruby/TypeScript              | `npm run test:parity`        |
-|     8 | Integração DOM                        | `npm run test:integration`   |
-|     9 | E2E Chromium                          | `npm run test:e2e`           |
-|    10 | Smoke autenticado opt-in              | `npm run test:authenticated` |
-|    11 | Todas as suítes locais                | `npm test`                   |
-|    12 | Build                                 | `npm run build`              |
-|    13 | ZIP reproduzível                      | `npm run package`            |
+| Ordem | Finalidade                            | Comando exato                              |
+| ----: | ------------------------------------- | ------------------------------------------ |
+|     1 | Instalação imutável                   | `npm ci`                                   |
+|     2 | Chromium do e2e                       | `npm run e2e:install`                      |
+|     3 | Desenvolvimento (encerrar com Ctrl+C) | `npm run dev`                              |
+|     4 | Typecheck                             | `npm run typecheck`                        |
+|     5 | Lint/formato                          | `npm run lint`                             |
+|     6 | Unitários                             | `npm run test:unit`                        |
+|     7 | Paridade Ruby/TypeScript              | `npm run test:parity`                      |
+|     8 | Integração DOM                        | `npm run test:integration`                 |
+|     9 | E2E Chromium                          | `npm run test:e2e`                         |
+|    10 | Smoke autenticado opt-in              | `npm run test:authenticated`               |
+|    11 | Fluxo real headless opt-in            | `npm run test:authenticated:headless-flow` |
+|    12 | Todas as suítes locais                | `npm test`                                 |
+|    13 | Build                                 | `npm run build`                            |
+|    14 | ZIP reproduzível                      | `npm run package`                          |
 
 Após `npm run build`, abra `chrome://extensions`, habilite o modo do desenvolvedor, escolha **Carregar sem compactação** e selecione `apps/chrome-extension/dist`. `npm run package` gera `artifacts/ahgora-channel-extension-0.1.0.zip` somente com o runtime da extensão. O comando `npm run dev` usa `dist-dev`, preservando a build instalável em `dist`.
 
 ## Uso
 
 1. Clique na action para abrir o painel lateral.
-2. No painel, escolha **Registrar** para Ahgora; mude para a aba Ahgora e clique novamente na action. Repita o gesto para Channel. Navegação para outra origem ou perda da concessão exige novo registro.
-3. Confira projeto e atividade, inicialmente preenchidos com `D15C0401.0 PETROBRAS_SUSTENTAÇÃO CERTIFICARE` e `1.3 ME04_Medição de agosto.26`. Tipo de atividade e tarefa usam `Nenhum` por padrão. Uma configuração já registrada na operação prevalece sobre esses valores iniciais. Escolha mês-calendário anterior, mês explícito ou intervalo inclusivo. Overrides aceitam uma linha `AAAA-MM-DD=HH:MM,HH:MM,...` e permanecem apenas em `storage.session`.
-4. Use **Capturar e comparar**. A prévia começa sem seleção e mostra três totais distintos: horas capturadas nos registros Ahgora efetivos, horas novas disponíveis para revisão antes das decisões e horas dos itens atualmente selecionados para preencher. Itens iguais e divergentes nunca são candidatos a preenchimento.
-5. Selecione individualmente, recuse ou use **Selecionar restantes**. O total **A preencher (selecionados)** acompanha essas decisões. **Executar dry-run** encerra com relatório e não escreve em página alguma.
-6. **Aplicar selecionados** prepara somente o primeiro item no formulário Channel. Confira e, se desejar, salve manualmente no próprio Channel. Depois use **Revise/salve no Channel e avançar**. A extensão revalida o estado antes de preencher o próximo item.
-7. **Cancelar operação** impede o despacho de novas escritas e preserva os resultados já observados. Se o `executeScript` do item corrente já tiver sido despachado, o cancelamento não desfaz esse preenchimento; ele impede o próximo item da fila.
+2. Em **Abrir, autenticar e conectar**, use **Abrir páginas e tentar login**. A extensão abre os dois sites e pede acesso opcional aos três hosts exatos. Barras e mensagens independentes mostram carregamento, espera pelo preenchimento automático, envio e confirmação da sessão. Se o gerenciador de senhas preencher usuário e senha, ela aciona o submit sem copiar esses valores e registra as duas abas automaticamente.
+3. Normalmente não há outra interação. Se o login terminar depois da primeira tentativa, a extensão detecta a navegação, confirma a página de trabalho e registra a aba automaticamente; **Verificar logins novamente** também permite repetir a leitura sem abrir abas duplicadas. Se a permissão for recusada, a interface explica por que ela é necessária e oferece **Permitir acesso e tentar novamente**. **Acesso manual** permanece como fallback.
+4. Confira projeto e atividade, inicialmente preenchidos com `D15C0401.0 PETROBRAS_SUSTENTAÇÃO CERTIFICARE` e `1.3 ME04_Medição de agosto.26`. Tipo de atividade e tarefa usam `Nenhum` por padrão. Uma configuração já registrada na operação prevalece sobre esses valores iniciais. Escolha mês-calendário anterior, mês explícito ou intervalo inclusivo. Overrides aceitam uma linha `AAAA-MM-DD=HH:MM,HH:MM,...` e permanecem apenas em `storage.session`.
+5. Use **Capturar e comparar**. As barras Ahgora e Channel mostram separadamente espera, consulta em andamento, quantidade recebida, conclusão ou falha. Na prévia, azul-claro indica item disponível para envio, verde-claro indica igualdade/confirmação, amarelo-claro indica divergência e vermelho-claro indica erro ou bloqueio. Itens iguais ou divergentes são apenas informativos e não exibem checkbox nem botão de ação.
+6. Selecione individualmente, recuse ou use **Selecionar restantes**. O total **A preencher (selecionados)** acompanha essas decisões. **Executar dry-run** encerra com relatório e não escreve em página alguma.
+7. Depois que ao menos um item enviável for marcado, aparecem **Selecionar restantes**, **Executar dry-run**, **Enviar selecionados** e **Cancelar operação**. **Enviar selecionados** é a autorização única para toda a seleção. A barra **Envio ao Channel** mostra a data em revalidação e a contagem confirmada (`n de N`). Cada confirmação transforma a linha em **Já igual**, atualiza a cor para verde e remove o item dos totais pendentes. Ao terminar, os controles desaparecem e uma mensagem de sucesso é exibida na própria prévia.
+8. **Cancelar operação** impede o despacho das próximas requisições. Uma requisição que já chegou ao Channel não pode ser revertida pela extensão.
 
-O Channel legado expõe um formulário para um único item e a ação de salvar é um submit. Por isso esta versão não sobrescreve o formulário para simular lote: ela mantém uma fila manual, nunca clica em salvar e nunca mostra `Enviado` como disponível.
+O Channel continua recebendo um item por requisição. A fila é sequencial e interrompe na primeira resposta ausente ou divergente para evitar repetição ambígua.
 
 ## Períodos e paridade
 
@@ -50,17 +52,19 @@ O Channel legado expõe um formulário para um único item e a ação de salvar 
 
 ## Permissões e dados
 
-O manifesto usa `activeTab`, `scripting`, `storage` e `sidePanel`; não declara `host_permissions` persistentes. Como o espelho Ahgora fica em um iframe de outra origem, declara apenas `https://mirror.app.ahgora.com.br/*` em `optional_host_permissions` e solicita esse acesso ao clicar em **Registrar Ahgora**. Cada site ainda exige gesto na própria aba. `chrome.storage.session` contém somente a operação corrente e pode incluir datas, horas, projeto e atividade até o fim da sessão. Não há `storage.local`, histórico, telemetria, código remoto, acesso a cookies ou captura de senha/token. Badge e erros usam apenas estado estrutural.
+O manifesto usa `activeTab`, `scripting`, `storage` e `sidePanel`; não declara permissões de host obrigatórias. Três hosts exatos aparecem como permissões opcionais para login, registro automático e execução nas páginas abertas pela extensão. O usuário pode recusá-las; nesse caso, o gesto `activeTab` em cada aba permanece como fallback temporário. Os requests rodam no contexto principal da página para que o navegador aplique o cookie de sessão ou o bearer já mantido pelo próprio sistema; a extensão não lê cookies e não persiste tokens ou credenciais. `chrome.storage.session` contém a operação corrente e pode incluir datas, horas, projeto, atividade e estado das etapas até o fim da sessão.
 
 Fixtures sintéticas comprovam o contrato local, não compatibilidade com páginas autenticadas. Antes de usar em dados reais, siga [docs/manual-validation.md](docs/manual-validation.md). Arquitetura e manutenção dos adapters estão em [docs/architecture.md](docs/architecture.md).
 
-O smoke autenticado é deliberadamente opt-in. Ele recebe URLs e credenciais somente por variáveis de ambiente, autentica um contexto efêmero do Chrome, não registra valores sensíveis e instala uma barreira contra `submit`/`requestSubmit` no formulário Channel. Para usar a configuração legada local: `set -a; source ../standalone/config.sh; RUN_AUTHENTICATED_SMOKE=1 npm run test:authenticated`. Esse teste não faz parte de `npm test`.
+O smoke autenticado é deliberadamente opt-in. Ele recebe URLs e credenciais somente por variáveis de ambiente e autentica um contexto efêmero do Chrome. O caminho direto consulta as APIs e prepara o POST completo, mas usa `commit: false`; nenhuma gravação real é executada pelo teste. Para usar a configuração legada local: `set -a; source ../standalone/config.sh; RUN_AUTHENTICATED_SMOKE=1 npm run test:authenticated`.
+
+O runner `test:authenticated:headless-flow` carrega a extensão empacotada em um perfil Chromium efêmero com permissões de host exatas apenas para as duas origens configuradas. Ele exige `RUN_AUTHENTICATED_HEADLESS_FLOW=1`, `CHANNEL_FLOW_START` e `CHANNEL_FLOW_END`. Sem `CHANNEL_FLOW_COMMIT=1`, apenas captura e compara. Com esse flag, envia POSTs reais somente se todas as datas estiverem ausentes e sem avisos, confirma cada gravação pelo Channel e repete a comparação exigindo igualdade. Exemplo não destrutivo: `set -a; source ../standalone/config.sh; RUN_AUTHENTICATED_HEADLESS_FLOW=1 CHANNEL_FLOW_START=2026-08-20 CHANNEL_FLOW_END=2026-08-21 npm run test:authenticated:headless-flow`.
 
 ### Escopo exato dos testes de navegador
 
 O e2e carrega a extensão e duas páginas HTTP sintéticas, incluindo o iframe Ahgora, mas começa de uma prévia colocada em `storage.session`: ele comprova renderização, seleção inicialmente vazia, bloqueio de duplo clique, reidratação e dry-run sem alterar/submeter Channel. Ele não é chamado de fluxo completo porque o Playwright não concede `activeTab` pela action real.
 
-O fluxo automatizado completo depois do gesto fica na integração coordenada: ela usa o mesmo `background/coordinator.ts` do service worker, o adapter Ahgora, leitura Channel injetada, comparação, seleção e preenchimento/fila em documentos sintéticos, verificando ausência de submit. O clique real da action, a concessão `activeTab` e o DOM autenticado continuam no checklist manual.
+O fluxo automatizado padrão depois do gesto fica na integração coordenada: ela comprova captura, leitura, comparação, seleção e envio sequencial de toda a fila após uma única ação. Os testes de contrato usam respostas sintéticas e o smoke autenticado valida os contratos reais sem fazer POST de gravação. A gravação real automatizada fica isolada no runner headless opt-in descrito acima.
 
 ## Limitações e solução de problemas
 
@@ -68,14 +72,13 @@ O fluxo automatizado completo depois do gesto fica na integração coordenada: e
 
 As mensagens de diagnóstico começam com `[AhgoraChannel]` e registram apenas códigos, origens, IDs técnicos, contagens e presença/ausência de elementos. Projeto, atividade, datas, horas, conteúdo das páginas e credenciais não são impressos.
 
-1. Abra `chrome://extensions`, localize **Ahgora para Channel** e clique no link **service worker** para ver registro de abas, permissão/frame Ahgora, execução Channel e erros de coordenação.
-2. Na aba Channel, abra as DevTools e consulte o Console para ver `[AhgoraChannel][ChannelRead]` e `[AhgoraChannel][ChannelFill]`, incluindo quais controles foram encontrados e quantas opções cada seletor possuía.
+1. Abra `chrome://extensions`, localize **Ahgora para Channel** e clique no link **service worker** para ver registro de abas, requests e erros de coordenação.
+2. Nas abas, filtre o Console por `[AhgoraChannel][AhgoraApi]`, `[ChannelApiRead]` ou `[ChannelApiWrite]`.
 3. Reproduza o erro e filtre o Console por `AhgoraChannel`. Ao relatar o problema, copie o objeto completo dessas mensagens e informe a ação executada.
 
 - **Acesso perdido/aba navegou:** escolha Registrar novamente e clique na action na aba correta.
-- **Login necessário/estrutura não encontrada:** autentique-se manualmente, confira a página esperada e execute o checklist; não altere seletores sem evidência sanitizada.
-- **Leitura do Channel:** mantenha a aba registrada na página de Extrato. Se o modal **Apontar horas** estiver aberto, feche ou cancele o formulário antes de capturar; a extensão não o fecha automaticamente para não descartar dados.
-- **Channel já contém valores no formulário:** revise ou limpe/salve manualmente. A extensão recusa sobrescrever um formulário ocupado.
+- **Login/API indisponível:** autentique-se manualmente e mantenha a aba Channel no Extrato, onde o cliente DWR necessário está carregado.
+- **Contexto Channel ausente:** a extensão faz um GET autenticado do Extrato para recuperar participante e empresa antes do DWR. Se ainda falhar, a mensagem distingue participante, empresa, login ou cliente DWR ausente; o Console registra somente a origem estrutural desses valores.
+- **Registro existente:** duração igual é tratada como idempotente; duração divergente interrompe a fila e não é sobrescrita.
 - **Fila parcial:** resultados anteriores são verdadeiros por item; itens restantes continuam pendentes. Não interprete como lote concluído.
-- **DOM real parcialmente validado:** captura Ahgora, override, leitura/comparação Channel e preenchimento com os prefixos configurados foram exercitados em sessões reais sem submit. O gesto `activeTab`, a aceitação do prompt opcional e o reinício real do service worker continuam no checklist manual.
-- **Iframe Ahgora:** depois de instalar ou atualizar, recarregue a extensão e use **Registrar Ahgora** para conceder o acesso opcional ao host exato do espelho; depois vá à aba e clique no ícone como antes.
+- **Validação real de escrita:** o smoke comum apenas prepara tokens, IDs e corpo. Somente **Enviar selecionados** ou o runner headless com `CHANNEL_FLOW_COMMIT=1` enviam apontamentos reais; ambos confirmam o resultado relendo o Channel.

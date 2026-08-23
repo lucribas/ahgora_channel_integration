@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   advanceQueue,
@@ -9,6 +9,7 @@ import {
   captureAndCompareOperation,
   decideItem,
   fillCurrentQueueItem,
+  fillSelectedQueue,
   prepareSelectedQueue,
   selectRemainingItems,
   type CoordinatorAdapters,
@@ -16,7 +17,9 @@ import {
 import {
   emptyOperation,
   publicState,
+  type CaptureProgress,
   type OperationData,
+  type WriteProgress,
 } from '../../src/application/types';
 import {
   civilDate,
@@ -42,6 +45,122 @@ import { makeMirrorCalendarText } from '../fixtures/source/mirror-calendar';
 const projectRoot = resolve(import.meta.dirname, '../..');
 
 describe('coordenador real sobre DOM sintético', () => {
+  it('envia toda a seleção após uma única ação', async () => {
+    const targetRows: {
+      date: ReturnType<typeof civilDate>;
+      duration: string;
+      durationMinutes: number;
+    }[] = [];
+    const sourceRunner = new SyntheticSourceRunner(
+      makeMirrorCalendarText('2026-08', {
+        '2026-07-26': ['08:00', '12:00'],
+        '2026-07-28': ['08:00', '12:00'],
+      }),
+    );
+    const base = adaptersFor(
+      sourceRunner,
+      makeExtractDocument(''),
+      await fixtureDocument('form'),
+      () => undefined,
+    );
+    const writeTarget = vi.fn((_state, assignment: ProjectAssignment) => {
+      targetRows.push({
+        date: assignment.date,
+        duration: assignment.duration,
+        durationMinutes: assignment.durationMinutes,
+      });
+      return Promise.resolve({
+        date: assignment.date,
+        requestedMinutes: assignment.durationMinutes,
+        resultingMinutes: assignment.durationMinutes,
+        status: 'filled' as const,
+      });
+    });
+    const reportCaptureProgress = vi.fn((progress: CaptureProgress) => {
+      void progress;
+      return Promise.resolve();
+    });
+    const writeSnapshots: OperationData[] = [];
+    const reportWriteProgress = vi.fn(
+      (progressState: OperationData, progress: WriteProgress) => {
+        void progress;
+        writeSnapshots.push(progressState);
+        return Promise.resolve();
+      },
+    );
+    const adapters: CoordinatorAdapters = {
+      ...base,
+      readTarget: () =>
+        Promise.resolve({
+          ok: true as const,
+          rows: targetRows.map((row, rowIndex) => ({ rowIndex, ...row })),
+          errors: [],
+        }),
+      writeTarget,
+      reportCaptureProgress,
+      reportWriteProgress,
+    };
+    const preview = await captureAndCompareOperation(
+      configuredState('single-action-batch'),
+      adapters,
+    );
+    const completed = await fillSelectedQueue(
+      prepareSelectedQueue(selectRemainingItems(preview)),
+      adapters,
+    );
+
+    expect(completed.phase).toBe('completed');
+    expect(writeTarget).toHaveBeenCalledTimes(2);
+    expect(completed.items.map(({ result }) => result)).toEqual([
+      'filled',
+      'filled',
+    ]);
+    expect(completed.items.map(({ status }) => status)).toEqual([
+      'equal',
+      'equal',
+    ]);
+    expect(publicState(completed)).toMatchObject({
+      reviewCount: 0,
+      selectedCount: 0,
+    });
+    expect(
+      reportWriteProgress.mock.calls.map(([, progress]) => ({
+        status: progress.status,
+        completedItems: progress.completedItems,
+        totalItems: progress.totalItems,
+      })),
+    ).toEqual([
+      { status: 'running', completedItems: 0, totalItems: 2 },
+      { status: 'running', completedItems: 1, totalItems: 2 },
+      { status: 'running', completedItems: 1, totalItems: 2 },
+      { status: 'running', completedItems: 2, totalItems: 2 },
+      { status: 'done', completedItems: 2, totalItems: 2 },
+    ]);
+    expect(writeSnapshots[1]?.items[0]?.result).toBe('filled');
+    expect(writeSnapshots[3]?.items[1]?.result).toBe('filled');
+    expect(completed.writeProgress).toMatchObject({
+      status: 'done',
+      completedItems: 2,
+      totalItems: 2,
+    });
+    expect(
+      reportCaptureProgress.mock.calls.map(([progress]) => progress),
+    ).toMatchObject([
+      {
+        ahgora: { status: 'running' },
+        channel: { status: 'waiting' },
+      },
+      {
+        ahgora: { status: 'done' },
+        channel: { status: 'running' },
+      },
+      {
+        ahgora: { status: 'done' },
+        channel: { status: 'done' },
+      },
+    ]);
+  });
+
   it('executa captura → leitura → comparação → seleção → fila de um item sem submit', async () => {
     const sourceRunner = new SyntheticSourceRunner(
       makeMirrorCalendarText('2026-08', {

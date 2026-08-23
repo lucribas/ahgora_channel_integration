@@ -32,6 +32,19 @@ describe('totais numéricos da operação', () => {
       selectedMinutes: 0,
       selectedCount: 0,
     });
+
+    const confirmed: OperationData = {
+      ...state,
+      items: state.items.map((item) =>
+        item.id === '2026-07-26' ? { ...item, result: 'filled' } : item,
+      ),
+    };
+    expect(operationTotals(confirmed)).toMatchObject({
+      reviewMinutes: 450,
+      reviewCount: 1,
+      selectedMinutes: 0,
+      selectedCount: 0,
+    });
   });
 });
 

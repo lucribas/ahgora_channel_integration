@@ -14,6 +14,13 @@ describe('message boundary validation', () => {
     ).toBe(true);
     expect(
       isIncomingMessage({
+        type: 'OPEN_LOGIN_PAGES',
+        operationId: 'op-1',
+        autoSubmit: true,
+      }),
+    ).toBe(true);
+    expect(
+      isIncomingMessage({
         type: 'REGISTER_ACTIVE_TAB',
         operationId: 'op-1',
         role: 'source',
@@ -32,6 +39,13 @@ describe('message boundary validation', () => {
     expect(isIncomingMessage(null)).toBe(false);
     expect(
       isIncomingMessage({ type: 'START_OPERATION', operationId: '' }),
+    ).toBe(false);
+    expect(
+      isIncomingMessage({
+        type: 'OPEN_LOGIN_PAGES',
+        operationId: 'op-1',
+        autoSubmit: 'yes',
+      }),
     ).toBe(false);
     expect(
       isIncomingMessage({

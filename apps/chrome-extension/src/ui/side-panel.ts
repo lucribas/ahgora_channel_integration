@@ -14,6 +14,7 @@ import type {
 } from '../application/types';
 import type { IncomingMessage, UiResponse } from '../messaging/messages';
 import { toSafeDiagnostic } from '../shared/diagnostics';
+import { LOGIN_PERMISSION_ORIGINS } from '../sites/login';
 
 // A única conversão DOM fica concentrada nesta fronteira; cada chamada informa o tipo nativo esperado.
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
@@ -25,8 +26,8 @@ const byId = <T extends HTMLElement>(id: string): T => {
 
 let state: PublicOperationState | undefined;
 let requestPending = false;
+let loginPermissionPending = false;
 let transientMessage: string | undefined;
-const AHGORA_MIRROR_ORIGIN = 'https://mirror.app.ahgora.com.br/*';
 
 function logPanelFailure(messageType: string, error: unknown): void {
   console.error('[AhgoraChannel][Panel]', {
@@ -111,7 +112,8 @@ function parseOverrides(value: string): readonly PunchOverride[] {
 
 function render(): void {
   if (state === undefined) return;
-  const busy = requestPending || state.inFlight !== undefined;
+  const busy =
+    requestPending || loginPermissionPending || state.inFlight !== undefined;
   document
     .querySelectorAll<HTMLButtonElement>('button')
     .forEach((button) => (button.disabled = busy));
@@ -120,22 +122,38 @@ function render(): void {
     state.phase === 'completed' ||
     state.phase === 'dry-run';
   renderConfig();
+  renderLoginPreparation();
+  renderCaptureProgress();
+  renderWriteProgress();
   renderTab('source', state.sourceTab?.id, state.pendingRole);
   renderTab('target', state.targetTab?.id, state.pendingRole);
+  const bothRegistered = state.sourceTab && state.targetTab;
+  const loginAttempted =
+    state.loginPreparation !== undefined &&
+    (state.loginPreparation.ahgora !== 'idle' ||
+      state.loginPreparation.channel !== 'idle');
+  byId<HTMLElement>('manual-registration').hidden =
+    !loginAttempted || Boolean(bothRegistered);
+  byId<HTMLElement>('registration-hint').textContent = bothRegistered
+    ? 'Abas registradas automaticamente pela permissão opcional concedida na etapa anterior.'
+    : 'Se alguma aba não foi registrada automaticamente, escolha Registrar, vá até ela e clique no ícone da extensão.';
   byId<HTMLButtonElement>('apply').disabled = busy || !state.canApply;
   const advance = byId<HTMLButtonElement>('advance');
   advance.hidden =
-    state.phase !== 'waiting-review' && state.phase !== 'partial';
+    state.inFlight !== undefined ||
+    (state.phase !== 'waiting-review' && state.phase !== 'partial');
   const currentItemId = state.queue[state.queueIndex];
   const currentResult = state.items.find(
     (item) => item.id === currentItemId,
   )?.result;
   advance.textContent =
     currentResult === 'filled'
-      ? 'Revise/salve no Channel e avançar'
+      ? 'Continuar após confirmação'
       : currentResult === 'already-correct'
         ? 'Item já correto — avançar'
         : 'Ignorar falha e avançar';
+  renderPreviewActions(advance);
+  renderPreviewStatus();
   byId<HTMLOutputElement>('operation-status').textContent =
     transientMessage ?? state.message ?? phaseLabel(state.phase);
   byId<HTMLElement>('totals').textContent =
@@ -169,7 +187,199 @@ function render(): void {
   );
   markStep('step-filled', recognized);
   markStep('step-confirmed', recognized);
+  markStep('step-sent', state.phase === 'completed');
   renderPreview();
+}
+
+function renderPreviewActions(advance: HTMLButtonElement): void {
+  if (!state) return;
+  const selectedSendable = state.items.some(
+    (item) =>
+      item.status === 'missing' &&
+      item.decision === 'selected' &&
+      item.result === undefined,
+  );
+  const showBatchActions = state.phase === 'preview' && selectedSendable;
+  for (const id of ['select-remaining', 'dry-run', 'apply'] as const)
+    byId<HTMLButtonElement>(id).hidden = !showBatchActions;
+  const showCancel =
+    selectedSendable &&
+    state.phase !== 'cancelled' &&
+    state.phase !== 'completed' &&
+    state.phase !== 'dry-run';
+  byId<HTMLButtonElement>('cancel').hidden = !showCancel;
+  byId<HTMLElement>('preview-actions').hidden =
+    !showBatchActions && !showCancel && advance.hidden;
+  byId<HTMLElement>('send-warning').hidden = !showBatchActions;
+}
+
+function renderPreviewStatus(): void {
+  if (!state) return;
+  const currentState = state;
+  const output = byId<HTMLOutputElement>('preview-status');
+  const confirmed = currentState.items.filter(
+    (item) => item.result === 'filled' || item.result === 'already-correct',
+  ).length;
+  const errors = currentState.items.filter(
+    (item) =>
+      item.result === 'failed' ||
+      item.result === 'not-found' ||
+      item.result === 'validation-error',
+  ).length;
+  const sending = currentState.inFlight === 'apply';
+  const allQueuedConfirmed =
+    currentState.queue.length > 0 &&
+    currentState.queue.every((itemId) => {
+      const result = currentState.items.find(
+        (item) => item.id === itemId,
+      )?.result;
+      return result === 'filled' || result === 'already-correct';
+    });
+  output.hidden =
+    !sending &&
+    confirmed === 0 &&
+    errors === 0 &&
+    currentState.phase !== 'completed' &&
+    currentState.phase !== 'partial';
+  output.classList.toggle(
+    'success',
+    errors === 0 && confirmed > 0 && (!sending || allQueuedConfirmed),
+  );
+  output.classList.toggle(
+    'error',
+    errors > 0 || currentState.phase === 'partial',
+  );
+  output.classList.toggle('running', sending && !allQueuedConfirmed);
+  output.textContent =
+    errors > 0 || currentState.phase === 'partial'
+      ? `Envio interrompido: ${String(confirmed)} confirmado(s) e ${String(errors)} com erro. Revise as linhas em vermelho.`
+      : allQueuedConfirmed
+        ? `Envio concluído com sucesso: ${String(confirmed)} apontamento(s) confirmado(s) pelo Channel.`
+        : sending
+          ? (currentState.writeProgress?.detail ??
+            `Enviando ao Channel: ${String(confirmed)} confirmado(s)…`)
+          : confirmed > 0 || currentState.phase === 'completed'
+            ? `Envio concluído com sucesso: ${String(confirmed)} apontamento(s) confirmado(s) pelo Channel.`
+            : '';
+}
+
+function renderLoginPreparation(): void {
+  const preparation = state?.loginPreparation;
+  renderLoginStatus(
+    'source',
+    preparation?.ahgora ?? 'idle',
+    preparation?.ahgoraDetail ?? 'A página do Ahgora ainda não foi aberta.',
+  );
+  renderLoginStatus(
+    'target',
+    preparation?.channel ?? 'idle',
+    preparation?.channelDetail ?? 'A página do Channel ainda não foi aberta.',
+  );
+  const denied = preparation?.permissionDenied === true;
+  const loginPending =
+    preparation?.ahgora === 'awaiting-user' ||
+    preparation?.ahgora === 'submitted' ||
+    preparation?.channel === 'awaiting-user' ||
+    preparation?.channel === 'submitted';
+  byId<HTMLButtonElement>('open-logins').textContent = denied
+    ? 'Permitir acesso e tentar novamente'
+    : loginPending
+      ? 'Verificar logins novamente'
+      : 'Abrir páginas e tentar login';
+  byId<HTMLElement>('login-permission-hint').textContent = preparation
+    ? denied
+      ? 'A permissão aos hosts do Ahgora e Channel é necessária para detectar o preenchimento, acionar o login e conectar as páginas automaticamente. Clique no botão acima para solicitá-la novamente.'
+      : preparation.autoSubmit
+        ? 'Acesso opcional concedido: tentativa automática habilitada somente nestas páginas de login.'
+        : preparation.ahgora !== 'idle' || preparation.channel !== 'idle'
+          ? 'Sem acesso opcional: conclua o login manualmente nas páginas abertas.'
+          : ''
+    : '';
+}
+
+function renderLoginStatus(
+  role: 'source' | 'target',
+  status: NonNullable<PublicOperationState['loginPreparation']>[
+    'ahgora' | 'channel'],
+  detail: string,
+): void {
+  const output = byId<HTMLOutputElement>(`login-${role}-state`);
+  output.textContent = {
+    idle: 'Não aberto',
+    opening: 'Abrindo…',
+    'awaiting-user': 'Aguardando login',
+    submitted: 'Login acionado',
+    ready: 'Página de trabalho aberta',
+    failed: 'Falha ao abrir',
+  }[status];
+  const bar = byId<HTMLProgressElement>(`login-${role}-progress`);
+  if (status === 'opening' || status === 'submitted')
+    bar.removeAttribute('value');
+  else
+    bar.value =
+      status === 'ready' || status === 'failed'
+        ? 100
+        : status === 'awaiting-user'
+          ? 50
+          : 0;
+  bar.classList.toggle('failed', status === 'failed');
+  byId<HTMLElement>(`login-${role}-detail`).textContent = detail;
+}
+
+function renderCaptureProgress(): void {
+  const progress = state?.captureProgress;
+  renderSystemProgress(
+    'ahgora',
+    progress?.ahgora ?? {
+      status: 'waiting',
+      detail: 'A captura ainda não começou.',
+    },
+  );
+  renderSystemProgress(
+    'channel',
+    progress?.channel ?? {
+      status: 'waiting',
+      detail: 'A consulta ainda não começou.',
+    },
+  );
+}
+
+function renderWriteProgress(): void {
+  const progress = state?.writeProgress;
+  const bar = byId<HTMLProgressElement>('write-progress');
+  const completed = progress?.completedItems ?? 0;
+  const total = progress?.totalItems ?? 0;
+  bar.value = total > 0 ? Math.round((completed / total) * 100) : 0;
+  bar.classList.toggle('failed', progress?.status === 'failed');
+  byId<HTMLOutputElement>('write-progress-state').textContent = progress
+    ? progress.status === 'done'
+      ? 'Concluído'
+      : progress.status === 'failed'
+        ? `Interrompido · ${String(completed)} de ${String(total)}`
+        : `${String(completed)} de ${String(total)}`
+    : 'Aguardando';
+  byId<HTMLElement>('write-progress-detail').textContent =
+    progress?.detail ?? 'Selecione os dias que deseja enviar.';
+}
+
+function renderSystemProgress(
+  system: 'ahgora' | 'channel',
+  progress: NonNullable<PublicOperationState['captureProgress']>[
+    'ahgora' | 'channel'],
+): void {
+  const bar = byId<HTMLProgressElement>(`${system}-progress`);
+  if (progress.status === 'running') bar.removeAttribute('value');
+  else
+    bar.value =
+      progress.status === 'done' || progress.status === 'failed' ? 100 : 0;
+  bar.classList.toggle('failed', progress.status === 'failed');
+  byId<HTMLOutputElement>(`${system}-progress-state`).textContent = {
+    waiting: 'Aguardando',
+    running: 'Em andamento',
+    done: 'Concluído',
+    failed: 'Falhou',
+  }[progress.status];
+  byId<HTMLElement>(`${system}-progress-detail`).textContent = progress.detail;
 }
 
 function totalLabel(
@@ -217,6 +427,7 @@ function renderTab(
         : 'Não registrado'
       : `Registrado · aba ${String(tabId)}`;
   output.classList.toggle('ready', tabId !== undefined);
+  byId<HTMLButtonElement>(`register-${role}`).hidden = tabId !== undefined;
 }
 
 function renderPreview(): void {
@@ -224,15 +435,30 @@ function renderPreview(): void {
   container.replaceChildren(
     ...(state?.items ?? []).map((item) => {
       const row = document.createElement('article');
-      row.className = 'item';
+      row.className = `item ${itemVisualClass(item)}`;
       row.setAttribute('role', 'listitem');
+      const body = document.createElement('div');
+      const title = document.createElement('p');
+      title.textContent = `${formatBrazilianDate(item.date)} · Ahgora ${item.ahgoraDuration}`;
+      const meta = document.createElement('p');
+      meta.className = 'meta';
+      const displayStatus =
+        item.result === 'filled' || item.result === 'already-correct'
+          ? 'equal'
+          : item.status;
+      meta.textContent = `${statusLabel(displayStatus)}${item.channelDuration ? ` · Channel ${item.channelDuration}` : ''}${item.result ? ` · ${resultLabel(item.result)}` : ''}${item.warning ? ` · ${item.warning}` : ''}`;
+      body.append(title, meta);
+      if (item.status !== 'missing' || item.result !== undefined) {
+        row.classList.add('readonly');
+        row.append(body);
+        return row;
+      }
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.checked = item.decision === 'selected';
       checkbox.disabled =
         requestPending ||
         state?.inFlight !== undefined ||
-        item.status !== 'missing' ||
         state?.phase !== 'preview';
       checkbox.setAttribute('aria-label', `Selecionar ${item.date}`);
       checkbox.addEventListener(
@@ -245,42 +471,46 @@ function renderPreview(): void {
             decision: checkbox.checked ? 'selected' : 'refused',
           }),
       );
-      const body = document.createElement('div');
-      const title = document.createElement('p');
-      title.textContent = `${formatBrazilianDate(item.date)} · Ahgora ${item.ahgoraDuration}`;
-      const meta = document.createElement('p');
-      meta.className = 'meta';
-      meta.textContent = `${statusLabel(item.status)}${item.channelDuration ? ` · Channel ${item.channelDuration}` : ''}${item.warning ? ` · ${item.warning}` : ''}`;
-      body.append(title, meta);
       const action = document.createElement('button');
       action.type = 'button';
-      if (item.result) {
-        action.className = 'result';
-        action.textContent = resultLabel(item.result);
-        action.disabled = true;
-      } else {
-        action.textContent =
-          item.decision === 'refused' ? 'Recusado' : 'Recusar';
-        action.disabled =
-          requestPending ||
-          state?.inFlight !== undefined ||
-          item.status !== 'missing' ||
-          state?.phase !== 'preview';
-        action.addEventListener(
-          'click',
-          () =>
-            void act({
-              type: 'SET_ITEM_DECISION',
-              operationId: operationId(),
-              itemId: item.id,
-              decision: 'refused',
-            }),
-        );
-      }
+      action.textContent = item.decision === 'refused' ? 'Recusado' : 'Recusar';
+      action.disabled =
+        requestPending ||
+        state?.inFlight !== undefined ||
+        state?.phase !== 'preview';
+      action.addEventListener(
+        'click',
+        () =>
+          void act({
+            type: 'SET_ITEM_DECISION',
+            operationId: operationId(),
+            itemId: item.id,
+            decision: 'refused',
+          }),
+      );
       row.append(checkbox, body, action);
       return row;
     }),
   );
+}
+
+function itemVisualClass(item: PublicOperationState['items'][number]): string {
+  if (item.status === 'divergent') return 'status-divergent';
+  if (
+    item.status === 'blocked' ||
+    item.result === 'failed' ||
+    item.result === 'not-found' ||
+    item.result === 'validation-error'
+  )
+    return 'status-error';
+  if (
+    item.status === 'equal' ||
+    item.result === 'filled' ||
+    item.result === 'already-correct'
+  )
+    return 'status-success';
+  if (item.result === undefined) return 'status-updatable';
+  return 'status-neutral';
 }
 
 function markStep(id: string, done: boolean): void {
@@ -293,11 +523,10 @@ function phaseLabel(phase: PublicOperationState['phase']): string {
       capturing: 'Capturando e comparando…',
       preview: 'Prévia pronta. Nenhum item foi selecionado automaticamente.',
       'dry-run': 'Dry-run concluído. Nenhuma página foi alterada.',
-      'waiting-review':
-        'Um item foi preenchido e reconhecido. Revise e salve manualmente no Channel antes de avançar.',
+      'waiting-review': 'Apontamento confirmado pelo Channel.',
       partial:
         'Fila parcial. Revise o resultado e avance quando o formulário estiver pronto.',
-      completed: 'Fila concluída sem envio pela extensão.',
+      completed: 'Fila enviada e confirmada pelo Channel.',
       cancelled: 'Operação cancelada. Resultados anteriores foram preservados.',
       failed:
         'A operação falhou. Revise a mensagem e registre novamente a aba se necessário.',
@@ -320,7 +549,7 @@ function resultLabel(result: string): string {
   return (
     (
       {
-        filled: 'Reconhecido no formulário',
+        filled: 'Enviado e confirmado',
         'already-correct': 'Já correto',
         skipped: 'Ignorado',
         'not-found': 'Não encontrado',
@@ -361,6 +590,7 @@ byId('new-operation').addEventListener(
   'click',
   () => void act({ type: 'START_OPERATION', operationId: crypto.randomUUID() }),
 );
+byId('open-logins').addEventListener('click', () => void openLoginPages());
 byId('register-source').addEventListener('click', () => void registerAhgora());
 byId('register-target').addEventListener(
   'click',
@@ -404,14 +634,6 @@ chrome.storage.onChanged.addListener((_changes, area) => {
 
 async function registerAhgora(): Promise<void> {
   try {
-    const granted = await chrome.permissions.request({
-      origins: [AHGORA_MIRROR_ORIGIN],
-    });
-    if (!granted) {
-      throw new Error(
-        'Conceda acesso ao iframe do espelho Ahgora para continuar.',
-      );
-    }
     await send({
       type: 'SET_PENDING_ROLE',
       operationId: operationId(),
@@ -422,9 +644,30 @@ async function registerAhgora(): Promise<void> {
       error instanceof Error
         ? error.message
         : 'Não foi possível solicitar acesso ao espelho Ahgora.';
-    logPanelFailure('REQUEST_AHGORA_MIRROR_PERMISSION', error);
+    logPanelFailure('REGISTER_AHGORA', error);
     render();
   }
+}
+
+async function openLoginPages(): Promise<void> {
+  if (loginPermissionPending) return;
+  loginPermissionPending = true;
+  render();
+  let autoSubmit = false;
+  try {
+    autoSubmit = await chrome.permissions.request({
+      origins: [...LOGIN_PERMISSION_ORIGINS],
+    });
+  } catch (error: unknown) {
+    logPanelFailure('REQUEST_LOGIN_PERMISSION', error);
+  } finally {
+    loginPermissionPending = false;
+  }
+  await act({
+    type: 'OPEN_LOGIN_PAGES',
+    operationId: operationId(),
+    autoSubmit,
+  });
 }
 
 void (async () => {

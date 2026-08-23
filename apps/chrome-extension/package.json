@@ -15,6 +15,7 @@
     "test:parity": "vitest run --project parity",
     "test:integration": "vitest run --project integration",
     "test:authenticated": "vitest run --project authenticated",
+    "test:authenticated:headless-flow": "node scripts/authenticated-headless-flow.mjs",
     "test:e2e": "npm run build && playwright test",
     "test": "npm run test:unit && npm run test:parity && npm run test:integration && npm run test:e2e",
     "build": "vite build && node scripts/verify-build.mjs",

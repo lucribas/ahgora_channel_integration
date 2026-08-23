@@ -57,6 +57,30 @@ test('carrega duas páginas sintéticas/iframe e mantém a prévia inicialmente 
     await expect(
       harness.panel.getByRole('heading', { name: 'Ahgora para Channel' }),
     ).toBeVisible();
+    await expect(
+      harness.panel.getByRole('heading', {
+        name: '1. Abrir, autenticar e conectar',
+      }),
+    ).toBeVisible();
+    await expect(harness.panel.locator('#manual-registration')).toBeHidden();
+    await expect(harness.panel.locator('#ahgora-progress')).toHaveAttribute(
+      'value',
+      '0',
+    );
+    await expect(harness.panel.locator('#channel-progress')).toHaveAttribute(
+      'value',
+      '0',
+    );
+    await expect(
+      harness.panel.locator('#login-source-progress'),
+    ).toHaveAttribute('value', '0');
+    await expect(
+      harness.panel.locator('#login-target-progress'),
+    ).toHaveAttribute('value', '0');
+    await expect(harness.panel.locator('#write-progress')).toHaveAttribute(
+      'value',
+      '0',
+    );
     await expect(harness.panel.locator('#month-field')).toBeHidden();
     await expect(harness.panel.locator('#start-field')).toBeHidden();
     await expect(harness.panel.locator('#end-field')).toBeHidden();
@@ -72,13 +96,29 @@ test('carrega duas páginas sintéticas/iframe e mantém a prévia inicialmente 
     await expect(
       harness.panel.getByText('Enviado', { exact: false }),
     ).toBeVisible();
-    await expect(harness.panel.getByText('indisponível')).toBeVisible();
     await expect(
       harness.panel.getByRole('checkbox', { name: /2026-07-26/ }),
     ).not.toBeChecked();
+    const updatableRow = harness.panel
+      .getByRole('listitem')
+      .filter({ hasText: '26/07/2026' });
+    await expect(updatableRow).toHaveClass(/status-updatable/);
+    const equalRow = harness.panel
+      .getByRole('listitem')
+      .filter({ hasText: 'Já igual' });
+    await expect(equalRow).toBeVisible();
+    await expect(equalRow.locator('input[type="checkbox"]')).toHaveCount(0);
+    await expect(equalRow.getByRole('button')).toHaveCount(0);
+    await expect(equalRow).toHaveClass(/status-success/);
     await expect(
-      harness.panel.getByRole('button', { name: 'Aplicar selecionados' }),
-    ).toBeDisabled();
+      harness.panel.getByRole('listitem').filter({ hasText: 'Divergente' }),
+    ).toHaveClass(/status-divergent/);
+    await expect(
+      harness.panel.getByRole('listitem').filter({ hasText: 'Bloqueado' }),
+    ).toHaveClass(/status-error/);
+    await expect(
+      harness.panel.getByRole('button', { name: 'Enviar selecionados' }),
+    ).toBeHidden();
     await expect(harness.panel.locator('#total-captured')).toHaveText(
       '08:00 · 1 registro',
     );
@@ -97,13 +137,72 @@ test('carrega duas páginas sintéticas/iframe e mantém a prévia inicialmente 
       '08:00 · 1 item',
     );
     await expect(
-      harness.panel.getByRole('button', { name: 'Aplicar selecionados' }),
+      harness.panel.getByRole('button', { name: 'Enviar selecionados' }),
     ).toBeEnabled();
+    await expect(
+      harness.panel.getByRole('button', { name: 'Selecionar restantes' }),
+    ).toBeVisible();
     await harness.panel.getByRole('button', { name: 'Recusar' }).click();
     await expect(harness.panel.locator('#total-selected')).toHaveText(
       '00:00 · 0 itens',
     );
     await expect(itemCheckbox).not.toBeChecked();
+    await expect(
+      harness.panel.getByRole('button', { name: 'Enviar selecionados' }),
+    ).toBeHidden();
+
+    await harness.serviceWorker.evaluate(async () => {
+      const stored = await chrome.storage.session.get('operationData');
+      const operation = stored.operationData as {
+        items: Array<Record<string, unknown>>;
+      };
+      await chrome.storage.session.set({
+        operationData: {
+          ...operation,
+          phase: 'completed',
+          queue: ['2026-07-26'],
+          queueIndex: 1,
+          items: operation.items.map((item) =>
+            item.id === '2026-07-26'
+              ? {
+                  ...item,
+                  decision: 'selected',
+                  result: 'filled',
+                  channelDuration: '08:00',
+                }
+              : item,
+          ),
+          writeProgress: {
+            status: 'done',
+            completedItems: 1,
+            totalItems: 1,
+            detail: '1 de 1 apontamento enviado e confirmado pelo Channel.',
+          },
+        },
+      });
+    });
+    await harness.panel.reload();
+    const confirmedRow = harness.panel
+      .getByRole('listitem')
+      .filter({ hasText: '26/07/2026' });
+    await expect(confirmedRow).toHaveClass(/status-success/);
+    await expect(confirmedRow).toContainText('Já igual');
+    await expect(confirmedRow).toContainText('Enviado e confirmado');
+    await expect(harness.panel.locator('#preview-status')).toHaveClass(
+      /success/,
+    );
+    await expect(harness.panel.locator('#preview-status')).toContainText(
+      'Envio concluído com sucesso',
+    );
+    for (const buttonName of [
+      'Selecionar restantes',
+      'Executar dry-run',
+      'Enviar selecionados',
+      'Cancelar operação',
+    ])
+      await expect(
+        harness.panel.getByRole('button', { name: buttonName }),
+      ).toBeHidden();
     await expect(harness.panel.locator('button[type="submit"]')).toHaveCount(0);
   } finally {
     await harness.context.close();
@@ -116,6 +215,7 @@ test('duplo clique em dry-run dispara uma ação, não altera/submete Channel e 
     await seedPreview(harness.serviceWorker);
     await harness.panel.reload();
     const before = await harness.target.locator('body').innerHTML();
+    await harness.panel.getByRole('checkbox', { name: /2026-07-26/ }).check();
     await harness.panel
       .getByRole('button', { name: 'Executar dry-run' })
       .dblclick();
@@ -126,7 +226,7 @@ test('duplo clique em dry-run dispara uma ação, não altera/submete Channel e 
     });
     expect(operation).toMatchObject({
       phase: 'dry-run',
-      revision: 2,
+      revision: 3,
     });
     await harness.panel.reload();
     await expect(harness.panel.getByText(/Dry-run concluído/)).toBeVisible();
@@ -138,6 +238,73 @@ test('duplo clique em dry-run dispara uma ação, não altera/submete Channel e 
             .__submitCount,
       ),
     ).toBe(0);
+  } finally {
+    await harness.context.close();
+  }
+});
+
+test('explica a permissão recusada e oferece nova tentativa', async () => {
+  const harness = await launchExtension();
+  try {
+    await harness.serviceWorker.evaluate(async () => {
+      const stored = await chrome.storage.session.get('operationData');
+      const operation = stored.operationData as Record<string, unknown>;
+      await chrome.storage.session.set({
+        operationData: {
+          ...operation,
+          revision: 1,
+          loginPreparation: {
+            ahgora: 'awaiting-user',
+            channel: 'awaiting-user',
+            ahgoraDetail:
+              'Permissão recusada. Faça login manualmente ou tente concedê-la novamente.',
+            channelDetail:
+              'Permissão recusada. Faça login manualmente ou tente concedê-la novamente.',
+            autoSubmit: false,
+            permissionDenied: true,
+          },
+        },
+      });
+    });
+    await harness.panel.reload();
+
+    await expect(
+      harness.panel.getByRole('button', {
+        name: 'Permitir acesso e tentar novamente',
+      }),
+    ).toBeVisible();
+    await expect(harness.panel.locator('#login-permission-hint')).toContainText(
+      'é necessária',
+    );
+    await expect(
+      harness.panel.locator('#login-source-progress'),
+    ).toHaveAttribute('value', '50');
+    await expect(
+      harness.panel.locator('#login-target-progress'),
+    ).toHaveAttribute('value', '50');
+
+    await harness.serviceWorker.evaluate(async () => {
+      const stored = await chrome.storage.session.get('operationData');
+      const operation = stored.operationData as {
+        loginPreparation: Record<string, unknown>;
+      };
+      await chrome.storage.session.set({
+        operationData: {
+          ...operation,
+          loginPreparation: {
+            ...operation.loginPreparation,
+            autoSubmit: true,
+            permissionDenied: false,
+          },
+        },
+      });
+    });
+    await harness.panel.reload();
+    await expect(
+      harness.panel.getByRole('button', {
+        name: 'Verificar logins novamente',
+      }),
+    ).toBeVisible();
   } finally {
     await harness.context.close();
   }
@@ -170,6 +337,30 @@ async function seedPreview(worker: Worker): Promise<void> {
             ahgoraDuration: '08:00',
             status: 'missing',
             decision: 'pending',
+          },
+          {
+            id: '2026-07-27',
+            date: '2026-07-27',
+            ahgoraDuration: '08:00',
+            channelDuration: '08:00',
+            status: 'equal',
+            decision: 'pending',
+          },
+          {
+            id: '2026-07-28',
+            date: '2026-07-28',
+            ahgoraDuration: '08:00',
+            channelDuration: '07:30',
+            status: 'divergent',
+            decision: 'pending',
+          },
+          {
+            id: '2026-07-29',
+            date: '2026-07-29',
+            ahgoraDuration: '—',
+            status: 'blocked',
+            decision: 'pending',
+            warning: 'Batidas inválidas.',
           },
         ],
         queue: [],
