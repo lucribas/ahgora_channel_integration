@@ -28,7 +28,8 @@ function isOperationData(value: unknown): value is OperationData {
     (record.inFlight === undefined ||
       record.inFlight === 'capture' ||
       record.inFlight === 'apply' ||
-      record.inFlight === 'advance') &&
+      record.inFlight === 'advance' ||
+      record.inFlight === 'delete') &&
     Array.isArray(record.items) &&
     Array.isArray(record.queue) &&
     Number.isInteger(record.queueIndex)

@@ -9,46 +9,103 @@
   <body>
     <main class="shell" aria-labelledby="title">
       <header class="hero">
-        <p class="eyebrow">Transferência assistida</p>
-        <h1 id="title">Ahgora para Channel</h1>
-        <p>Capture, compare e preencha um item por vez para revisão.</p>
-        <button id="new-operation" type="button">Nova operação</button>
-      </header>
-
-      <section class="card" aria-labelledby="login-title">
-        <h2 id="login-title">1. Abrir, autenticar e conectar</h2>
-        <p class="hint">
-          Abra Ahgora e Channel de uma vez. Se você conceder acesso opcional, a
-          extensão tenta acionar o formulário somente quando o gerenciador de
-          senhas já tiver preenchido os campos; ela não lê nem armazena a senha.
-        </p>
-        <div class="system-progress" aria-label="Progresso dos logins">
-          <div>
-            <div class="progress-heading">
-              <strong>Ahgora</strong>
-              <output id="login-source-state">Não aberto</output>
-            </div>
-            <progress id="login-source-progress" max="100" value="0"></progress>
-            <p id="login-source-detail" class="hint">
-              A página do Ahgora ainda não foi aberta.
-            </p>
-          </div>
-          <div>
-            <div class="progress-heading">
-              <strong>Channel</strong>
-              <output id="login-target-state">Não aberto</output>
-            </div>
-            <progress id="login-target-progress" max="100" value="0"></progress>
-            <p id="login-target-detail" class="hint">
-              A página do Channel ainda não foi aberta.
-            </p>
+        <div class="hero-toolbar">
+          <p class="eyebrow">Transferência assistida</p>
+          <div class="font-controls" aria-label="Tamanho das letras">
+            <button
+              id="font-decrease"
+              type="button"
+              aria-label="Diminuir letras"
+            >
+              A−
+            </button>
+            <output id="font-scale" aria-live="polite">130%</output>
+            <button
+              id="font-increase"
+              type="button"
+              aria-label="Aumentar letras"
+            >
+              A+
+            </button>
           </div>
         </div>
-        <button id="open-logins" class="primary" type="button">
-          Abrir páginas e tentar login
-        </button>
-        <p id="login-permission-hint" class="hint"></p>
-      </section>
+        <div class="hero-brand">
+          <img
+            class="hero-logo"
+            src="../../assets/clock_monster_logo.png"
+            alt=""
+            width="104"
+            height="104"
+          />
+          <div class="hero-copy">
+            <h1 id="title">Ahgora para Channel</h1>
+            <p>O jeito mais rápido de fazer marcações de ponto</p>
+            <button id="new-operation" type="button">Nova operação</button>
+          </div>
+        </div>
+      </header>
+
+      <nav class="flow-overview" aria-label="Etapas da operação">
+        <ol>
+          <li id="flow-login"><span>1</span>Conectar</li>
+          <li id="flow-config"><span>2</span>Definir</li>
+          <li id="flow-templates"><span>3</span>Automatizar</li>
+          <li id="flow-capture"><span>4</span>Capturar</li>
+          <li id="flow-review"><span>5</span>Revisar</li>
+          <li id="flow-send"><span>6</span>Enviar</li>
+        </ol>
+      </nav>
+
+      <details id="login-card" class="card collapsible-card workflow-card" open>
+        <summary class="card-summary">
+          <span id="login-title" role="heading" aria-level="2"
+            >1. Abrir, autenticar e conectar</span
+          >
+          <output id="login-summary" class="pill">Pendente</output>
+        </summary>
+        <div class="collapsible-content">
+          <p class="hint">
+            Abre Ahgora e Channel de uma vez. Ela não lê nem armazena as senhas.
+          </p>
+          <div class="system-progress" aria-label="Progresso dos logins">
+            <div>
+              <div class="progress-heading">
+                <strong>Ahgora</strong>
+                <output id="login-source-state">Não aberto</output>
+              </div>
+              <progress
+                id="login-source-progress"
+                max="100"
+                value="0"
+              ></progress>
+              <p id="login-source-detail" class="hint">
+                A página do Ahgora ainda não foi aberta.
+              </p>
+            </div>
+            <div>
+              <div class="progress-heading">
+                <strong>Channel</strong>
+                <output id="login-target-state">Não aberto</output>
+              </div>
+              <progress
+                id="login-target-progress"
+                max="100"
+                value="0"
+              ></progress>
+              <p id="login-target-detail" class="hint">
+                A página do Channel ainda não foi aberta.
+              </p>
+            </div>
+          </div>
+          <button id="stop-login" class="stop-progress" type="button" hidden>
+            Parar login
+          </button>
+          <button id="open-logins" class="primary" type="button">
+            Abrir páginas e tentar login
+          </button>
+          <p id="login-permission-hint" class="hint"></p>
+        </div>
+      </details>
 
       <section
         id="manual-registration"
@@ -58,9 +115,8 @@
       >
         <h2 id="tabs-title">Acesso manual — somente se necessário</h2>
         <p id="registration-hint" class="hint">
-          Escolha um papel, vá até a aba correta e clique no ícone da extensão.
-          Cada aba exige seu próprio gesto. As chamadas reutilizam a sessão já
-          autenticada sem acessar senhas ou cookies diretamente.
+          Vá até a aba correta e clique no ícone da extensão. Cada aba exige seu
+          próprio clique.
         </p>
         <div class="tab-row">
           <span>Ahgora</span
@@ -74,165 +130,399 @@
         </div>
       </section>
 
-      <section class="card" aria-labelledby="config-title">
-        <h2 id="config-title">2. Configurar</h2>
-        <div class="field-grid">
-          <label
-            >Projeto
-            <input
-              id="project"
-              value="D15C0401.0 PETROBRAS_SUSTENTAÇÃO CERTIFICARE"
-              autocomplete="off"
-              required
-          /></label>
-          <label
-            >Atividade
-            <input
-              id="activity"
-              value="1.3 ME04_Medição de agosto.26"
-              autocomplete="off"
-              required
-          /></label>
-          <label
-            >Tipo de atividade
-            <input id="activity-type" value="Nenhum" autocomplete="off"
-          /></label>
-          <label
-            >Tarefa <input id="task" value="Nenhum" autocomplete="off"
-          /></label>
-          <label
-            >Período
-            <select id="period-kind">
-              <option value="default">Mês-calendário anterior</option>
-              <option value="month">Mês específico</option>
-              <option value="range">Intervalo inclusivo</option>
-            </select>
-          </label>
-          <label id="month-field" hidden
-            >Mês de fechamento <input id="month" type="month"
-          /></label>
-          <label id="start-field" hidden
-            >Data inicial <input id="start" type="date"
-          /></label>
-          <label id="end-field" hidden
-            >Data final <input id="end" type="date"
-          /></label>
+      <details id="config-card" class="card collapsible-card workflow-card">
+        <summary class="card-summary">
+          <span id="config-title" role="heading" aria-level="2"
+            >2. Definição de marcações de ponto no Channel</span
+          >
+        </summary>
+        <div class="collapsible-content">
+          <p class="hint">
+            Salve combinações de projeto + atividade. O nome da TAG é criado
+            automaticamente e poderá ser escolhido em cada dia novo.
+          </p>
+          <div class="catalog-heading">
+            <div>
+              <strong>Projetos e atividades disponíveis</strong>
+              <p id="catalog-status" class="hint">
+                Cache ainda não consultado.
+              </p>
+            </div>
+            <button id="fetch-catalog" type="button">
+              Atualizar do Channel
+            </button>
+          </div>
+          <div class="tag-editor" aria-labelledby="tag-editor-title">
+            <h3 id="tag-editor-title">Criar TAG</h3>
+            <div class="field-grid">
+              <label
+                >Nome da TAG (automático)
+                <input
+                  id="tag-name"
+                  readonly
+                  placeholder="Escolha projeto e atividade"
+                />
+              </label>
+              <label
+                >Projeto
+                <select id="tag-project" disabled>
+                  <option value="">Obtenha o espelho do Channel</option>
+                </select>
+              </label>
+              <label
+                >Atividade
+                <select id="tag-activity" disabled>
+                  <option value="">Escolha primeiro um projeto</option>
+                </select>
+              </label>
+              <label class="default-choice">
+                <input id="tag-default" type="checkbox" />
+                Usar esta TAG por padrão
+              </label>
+            </div>
+            <details>
+              <summary>Opções avançadas desta TAG</summary>
+              <div class="field-grid details-content">
+                <label
+                  >Tipo de atividade
+                  <input id="activity-type" value="Nenhum" autocomplete="off" />
+                </label>
+                <label
+                  >Tarefa
+                  <input id="task" value="Nenhum" autocomplete="off" />
+                </label>
+              </div>
+            </details>
+            <button id="save-tag" class="primary" type="button">
+              Salvar TAG
+            </button>
+            <output
+              id="tag-editor-status"
+              class="hint"
+              aria-live="polite"
+            ></output>
+          </div>
+          <div>
+            <h3>TAGs salvas</h3>
+            <div id="tag-list" class="tag-list" role="list"></div>
+          </div>
         </div>
-        <label
-          >Overrides desta operação
-          <textarea
-            id="overrides"
-            rows="3"
-            placeholder="2026-08-03=08:00,12:00,13:00,17:00"
-          ></textarea>
-        </label>
-        <p class="hint">
-          Um por linha, no formato AAAA-MM-DD=HH:MM,HH:MM. Ficam somente na
-          sessão do navegador.
-        </p>
-        <button id="capture" class="primary" type="button">
-          Capturar e comparar
-        </button>
-      </section>
+      </details>
 
-      <section class="card" aria-labelledby="progress-title">
-        <h2 id="progress-title">3. Estado da operação</h2>
-        <div class="system-progress" aria-label="Progresso da captura">
-          <div>
-            <div class="progress-heading">
-              <strong>Ahgora</strong>
-              <output id="ahgora-progress-state">Aguardando</output>
+      <details
+        id="template-manager-card"
+        class="card collapsible-card workflow-card"
+      >
+        <summary class="card-summary">
+          <span id="template-manager-title" role="heading" aria-level="2"
+            >3. Conjuntos e regras automáticas</span
+          >
+          <output id="template-manager-summary" class="pill"
+            >0 conjuntos</output
+          >
+        </summary>
+        <div class="collapsible-content">
+          <p class="stage-intro">
+            Salve a distribuição de um dia como conjunto. Depois, reutilize-a
+            manualmente ou crie regras semanais para aplicá-la aos novos dias.
+          </p>
+
+          <section class="manager-section" aria-labelledby="templates-title">
+            <div class="section-heading">
+              <div>
+                <h3 id="templates-title">Templates de conjuntos</h3>
+                <p class="hint">
+                  Cada template preserva os percentuais e as horas originais.
+                  Crie um usando “Salvar como conjunto” em um dia da revisão.
+                </p>
+              </div>
             </div>
-            <progress id="ahgora-progress" max="100" value="0"></progress>
-            <p id="ahgora-progress-detail" class="hint">
-              A captura ainda não começou.
-            </p>
-          </div>
-          <div>
-            <div class="progress-heading">
-              <strong>Channel</strong>
-              <output id="channel-progress-state">Aguardando</output>
+            <div id="template-list" class="manager-list" role="list"></div>
+          </section>
+
+          <section class="manager-section" aria-labelledby="rules-title">
+            <div>
+              <h3 id="rules-title">Regras de aplicação</h3>
+              <p class="hint">
+                Interface semanal no padrão do Google Calendar. A primeira regra
+                ativa compatível com o dia será aplicada.
+              </p>
             </div>
-            <progress id="channel-progress" max="100" value="0"></progress>
-            <p id="channel-progress-detail" class="hint">
-              A consulta ainda não começou.
-            </p>
+            <div class="rule-editor">
+              <label
+                >Nome da regra
+                <input
+                  id="rule-name"
+                  maxlength="80"
+                  placeholder="Ex.: Distribuição das sextas"
+                />
+              </label>
+              <div class="recurrence-frequency">
+                <span>Repetir a cada</span>
+                <input
+                  id="rule-every"
+                  type="number"
+                  min="1"
+                  max="52"
+                  value="1"
+                  aria-label="Intervalo de repetição em semanas"
+                />
+                <span>semana(s)</span>
+              </div>
+              <fieldset class="weekday-picker">
+                <legend>Repetir em</legend>
+                <label><input type="checkbox" value="1" />S</label>
+                <label><input type="checkbox" value="2" />T</label>
+                <label><input type="checkbox" value="3" />Q</label>
+                <label><input type="checkbox" value="4" />Q</label>
+                <label><input type="checkbox" value="5" />S</label>
+                <label><input type="checkbox" value="6" />S</label>
+                <label><input type="checkbox" value="0" />D</label>
+              </fieldset>
+              <label
+                >Inicia em
+                <input id="rule-start" type="date" />
+              </label>
+              <fieldset class="recurrence-end">
+                <legend>Termina</legend>
+                <label>
+                  <input type="radio" name="rule-end" value="never" checked />
+                  Nunca
+                </label>
+                <label>
+                  <input type="radio" name="rule-end" value="on" />
+                  Em
+                  <input
+                    id="rule-end-date"
+                    type="date"
+                    aria-label="Data final da recorrência"
+                    disabled
+                  />
+                </label>
+                <label>
+                  <input type="radio" name="rule-end" value="after" />
+                  Após
+                  <input
+                    id="rule-end-count"
+                    type="number"
+                    min="1"
+                    max="730"
+                    value="10"
+                    aria-label="Quantidade de ocorrências"
+                    disabled
+                  />
+                  ocorrência(s)
+                </label>
+              </fieldset>
+              <div class="rule-composition">
+                <div class="section-heading">
+                  <div>
+                    <strong>Composição da regra</strong>
+                    <p class="hint">
+                      Misture templates e defina a participação de cada um. O
+                      total precisa ser 100%.
+                    </p>
+                  </div>
+                  <button id="add-rule-template" type="button">
+                    Adicionar conjunto
+                  </button>
+                </div>
+                <div
+                  id="rule-template-shares"
+                  class="rule-template-shares"
+                ></div>
+                <output id="rule-share-total" class="rule-share-total"
+                  >Total: 0%</output
+                >
+              </div>
+              <label class="default-choice">
+                <input id="rule-enabled" type="checkbox" checked />
+                Ativar esta regra ao salvar
+              </label>
+              <button id="save-rule" class="primary" type="button">
+                Salvar regra
+              </button>
+            </div>
+            <output
+              id="template-manager-status"
+              class="hint"
+              aria-live="polite"
+            ></output>
+            <div id="rule-list" class="manager-list" role="list"></div>
+          </section>
+        </div>
+      </details>
+
+      <details id="capture-card" class="card collapsible-card workflow-card">
+        <summary class="card-summary">
+          <span id="capture-title" role="heading" aria-level="2"
+            >4. Capturar e comparar marcações</span
+          >
+        </summary>
+        <div class="collapsible-content">
+          <div class="field-grid">
+            <label
+              >Período
+              <select id="period-kind">
+                <option value="default">Mês-calendário anterior</option>
+                <option value="month" selected>Mês específico</option>
+                <option value="range">Intervalo inclusivo</option>
+              </select>
+            </label>
+            <label id="month-field"
+              >Mês de fechamento <input id="month" type="month"
+            /></label>
+            <label id="start-field" hidden
+              >Data inicial <input id="start" type="date"
+            /></label>
+            <label id="end-field" hidden
+              >Data final <input id="end" type="date"
+            /></label>
           </div>
-          <div>
+          <label
+            >Overrides desta operação
+            <textarea
+              id="overrides"
+              rows="3"
+              placeholder="2026-08-03=08:00,12:00,13:00,17:00"
+            ></textarea>
+          </label>
+          <p class="hint">
+            Um por linha, no formato AAAA-MM-DD=HH:MM,HH:MM. Ficam somente na
+            sessão do navegador.
+          </p>
+          <button id="capture" class="primary" type="button">
+            Capturar e comparar
+          </button>
+          <div class="stage-feedback" aria-labelledby="capture-progress-title">
+            <h3 id="capture-progress-title">Progresso da captura</h3>
+            <div class="system-progress" aria-label="Progresso da captura">
+              <div>
+                <div class="progress-heading">
+                  <strong>Ahgora</strong>
+                  <output id="ahgora-progress-state">Aguardando</output>
+                </div>
+                <progress id="ahgora-progress" max="100" value="0"></progress>
+                <p id="ahgora-progress-detail" class="hint">
+                  A captura ainda não começou.
+                </p>
+              </div>
+              <div>
+                <div class="progress-heading">
+                  <strong>Channel</strong>
+                  <output id="channel-progress-state">Aguardando</output>
+                </div>
+                <progress id="channel-progress" max="100" value="0"></progress>
+                <p id="channel-progress-detail" class="hint">
+                  A consulta ainda não começou.
+                </p>
+              </div>
+            </div>
+            <button
+              id="stop-capture"
+              class="stop-progress"
+              type="button"
+              hidden
+            >
+              Parar captura
+            </button>
+          </div>
+        </div>
+      </details>
+
+      <details id="review-card" class="card collapsible-card workflow-card">
+        <summary class="card-summary">
+          <span id="review-title" role="heading" aria-level="2"
+            >5. Revisar e selecionar dias</span
+          >
+          <span id="totals" class="pill">0 itens</span>
+        </summary>
+        <div class="collapsible-content">
+          <p class="stage-intro">
+            Confira as diferenças e distribua cada dia novo entre uma ou mais
+            marcações. O total do dia é sempre preservado.
+          </p>
+          <output id="operation-status" class="notice" aria-live="polite"
+            >Pronto para configurar.</output
+          >
+          <p id="effective-period" class="hint"></p>
+          <dl class="hour-totals" aria-label="Totais da comparação">
+            <div>
+              <dt>Capturado</dt>
+              <dd><output id="total-captured">00:00 · 0 registros</output></dd>
+            </div>
+            <div>
+              <dt>Novos para revisar</dt>
+              <dd><output id="total-review">00:00 · 0 itens</output></dd>
+            </div>
+            <div>
+              <dt>Selecionados para enviar</dt>
+              <dd><output id="total-selected">00:00 · 0 itens</output></dd>
+            </div>
+          </dl>
+          <p class="hint">
+            Dias novos sem avisos são selecionados automaticamente. Dias iguais,
+            divergentes ou com aviso não são enviados sem revisão. Reduzir uma
+            marcação cria outra com o saldo restante.
+          </p>
+          <div id="preview" class="preview" role="list"></div>
+          <div id="review-actions" class="actions" hidden>
+            <button id="select-remaining" type="button">
+              Selecionar restantes
+            </button>
+            <button id="dry-run" type="button">Executar dry-run</button>
+          </div>
+        </div>
+      </details>
+
+      <details id="send-card" class="card collapsible-card workflow-card">
+        <summary class="card-summary">
+          <span id="send-title" role="heading" aria-level="2"
+            >6. Enviar ao Channel</span
+          >
+        </summary>
+        <div class="collapsible-content">
+          <p class="stage-intro">
+            Esta etapa só é liberada quando houver dias selecionados na revisão.
+            Um único clique inicia o envio de toda a seleção.
+          </p>
+          <div class="stage-feedback" aria-labelledby="send-progress-title">
             <div class="progress-heading">
-              <strong>Envio ao Channel</strong>
+              <h3 id="send-progress-title">Progresso do envio</h3>
               <output id="write-progress-state">Aguardando</output>
             </div>
             <progress id="write-progress" max="100" value="0"></progress>
             <p id="write-progress-detail" class="hint">
-              Selecione os dias que deseja enviar.
+              Selecione os dias que deseja enviar na etapa 5.
             </p>
+            <button id="stop-write" class="stop-progress" type="button" hidden>
+              Parar envio
+            </button>
           </div>
+          <output
+            id="preview-status"
+            class="notice preview-status"
+            aria-live="polite"
+            hidden
+          ></output>
+          <div id="send-actions" class="actions" hidden>
+            <button id="apply" class="primary" type="button" disabled>
+              Enviar selecionados
+            </button>
+            <button id="advance" class="primary" type="button" hidden>
+              Continuar após falha
+            </button>
+            <button id="cancel" class="danger" type="button">
+              Cancelar operação
+            </button>
+          </div>
+          <p id="send-warning" class="warning" hidden>
+            Um clique envia todos os itens selecionados diretamente ao Channel.
+            Em caso de resposta ambígua, a fila é interrompida para evitar
+            duplicidade.
+          </p>
         </div>
-        <ol class="steps" aria-label="Etapas">
-          <li id="step-captured">Capturado</li>
-          <li id="step-validated">Validado</li>
-          <li id="step-filled">Preenchido</li>
-          <li id="step-confirmed">Confirmado pelo site</li>
-          <li id="step-sent">Enviado pela API</li>
-        </ol>
-        <output id="operation-status" class="notice" aria-live="polite"
-          >Pronto para configurar.</output
-        >
-        <p id="effective-period" class="hint"></p>
-      </section>
-
-      <section class="card" aria-labelledby="preview-title">
-        <div class="section-heading">
-          <h2 id="preview-title">4. Prévia</h2>
-          <span id="totals" class="pill">0 itens</span>
-        </div>
-        <dl class="hour-totals" aria-label="Totais da prévia">
-          <div>
-            <dt>Capturado</dt>
-            <dd><output id="total-captured">00:00 · 0 registros</output></dd>
-          </div>
-          <div>
-            <dt>Novos para revisar (pré-seleção)</dt>
-            <dd><output id="total-review">00:00 · 0 itens</output></dd>
-          </div>
-          <div>
-            <dt>A preencher (selecionados)</dt>
-            <dd><output id="total-selected">00:00 · 0 itens</output></dd>
-          </div>
-        </dl>
-        <p class="hint">
-          Nada é selecionado inicialmente. Dias iguais ou divergentes não são
-          alterados.
-        </p>
-        <div id="preview" class="preview" role="list"></div>
-        <output
-          id="preview-status"
-          class="notice preview-status"
-          aria-live="polite"
-          hidden
-        ></output>
-        <div id="preview-actions" class="actions" hidden>
-          <button id="select-remaining" type="button">
-            Selecionar restantes
-          </button>
-          <button id="dry-run" type="button">Executar dry-run</button>
-          <button id="apply" class="primary" type="button" disabled>
-            Enviar selecionados
-          </button>
-          <button id="advance" class="primary" type="button" hidden>
-            Continuar após falha
-          </button>
-          <button id="cancel" class="danger" type="button">
-            Cancelar operação
-          </button>
-        </div>
-        <p id="send-warning" class="warning" hidden>
-          Um clique envia todos os itens selecionados diretamente ao Channel. Em
-          caso de resposta ambígua, a fila é interrompida para evitar
-          duplicidade.
-        </p>
-      </section>
+      </details>
     </main>
     <script type="module" src="./side-panel.ts"></script>
   </body>

@@ -7,6 +7,7 @@ import {
   civilDate,
   compareAhgoraWithChannel,
   defaultPeriod,
+  formatDurationMinutes,
   formatBrazilianDate,
   rangePeriod,
   resolvePeriod,
@@ -26,7 +27,9 @@ import {
 } from '../../src/sites/source';
 import {
   runInjectedChannelApiRead,
+  runInjectedChannelApiDelete,
   runInjectedChannelApiWrite,
+  runInjectedChannelCatalog,
   runInjectedChannelFill,
   runInjectedChannelRead,
   type InjectedChannelFillInput,
@@ -121,12 +124,43 @@ describe.runIf(runAuthenticated)('sites autenticados, sem submissão', () => {
       await channel
         .locator('#totalItensPagina')
         .waitFor({ state: 'visible', timeout: 30_000 });
+      const catalog = await channel.evaluate(runInjectedChannelCatalog, {
+        timeoutMs: 30_000,
+      });
+      if (!catalog.ok) throw new Error(`CHANNEL_CATALOG_${catalog.code}`);
+      const configuredProject = catalog.projects.find((project) =>
+        project.label.startsWith(config.project),
+      );
+      expect(configuredProject).toBeDefined();
+      expect(
+        configuredProject?.activities.some((activity) =>
+          activity.label.startsWith(config.activity),
+        ),
+      ).toBe(true);
+
       const target = await channel.evaluate(runInjectedChannelApiRead, {
         startDate: formatBrazilianDate(period.start),
         endDate: formatBrazilianDate(period.end),
         timeoutMs: 30_000,
       });
       if (!target.ok) throw new Error(`CHANNEL_API_READ_${target.code}`);
+
+      const knownRows = await channel.evaluate(runInjectedChannelApiRead, {
+        startDate: '20/08/2026',
+        endDate: '21/08/2026',
+        timeoutMs: 30_000,
+      });
+      if (!knownRows.ok)
+        throw new Error(`CHANNEL_DETAIL_READ_${knownRows.code}`);
+      expect(knownRows.rows).toHaveLength(2);
+      expect(
+        knownRows.rows.every(
+          (row) => Boolean(row.project) && Boolean(row.activity),
+        ),
+      ).toBe(true);
+      expect(
+        knownRows.rows.every((row) => (row.markings?.length ?? 0) > 0),
+      ).toBe(true);
 
       let channelWrites = 0;
       channel.on('request', (request) => {
@@ -356,6 +390,175 @@ describe.runIf(runAuthenticated)('sites autenticados, sem submissão', () => {
     }
   });
 });
+
+const runAuthenticatedRagWrite =
+  process.env.RUN_AUTHENTICATED_RAG_WRITE === '1';
+
+describe.runIf(runAuthenticatedRagWrite)(
+  'Channel real: modelos RAG em 21/08/2026',
+  () => {
+    it('apaga, grava e confirma PROJETOS e AVULSO e restaura o total do Ahgora', async () => {
+      const config = authenticatedConfig();
+      const testDate = civilDate('2026-08-21');
+      const brazilianDate = formatBrazilianDate(testDate);
+      const browser = await chromium.launch({
+        channel: 'chrome',
+        headless: true,
+      });
+      const context = await browser.newContext();
+      const ahgora = await context.newPage();
+      const channel = await context.newPage();
+      let cleared = false;
+      let ahgoraMinutes = 0;
+
+      const readDay = async () => {
+        const result = await channel.evaluate(runInjectedChannelApiRead, {
+          startDate: brazilianDate,
+          endDate: brazilianDate,
+          timeoutMs: 30_000,
+        });
+        if (!result.ok) throw new Error(`CHANNEL_RAG_READ_${result.code}`);
+        return result.rows.find((row) => row.date === testDate);
+      };
+      const clearDay = async (): Promise<void> => {
+        const row = await readDay();
+        for (const marking of row?.markings ?? []) {
+          if (!marking.canDelete)
+            throw new Error(`CHANNEL_RAG_DELETE_NOT_PERMITTED_${marking.id}`);
+          const result = await channel.evaluate(runInjectedChannelApiDelete, {
+            id: marking.id,
+            date: testDate,
+            timeoutMs: 30_000,
+          });
+          if (!result.ok)
+            throw new Error(`CHANNEL_RAG_DELETE_${result.code}_${marking.id}`);
+        }
+        const remaining = await readDay();
+        if ((remaining?.markings?.length ?? 0) !== 0)
+          throw new Error('CHANNEL_RAG_DELETE_NOT_CONFIRMED');
+      };
+      const restoreDefault = async (): Promise<void> => {
+        await clearDay();
+        if (ahgoraMinutes <= 0) return;
+        const restored = await channel.evaluate(runInjectedChannelApiWrite, {
+          kind: 'PROJETOS',
+          project: config.project,
+          activityType: config.activityType,
+          activity: config.activity,
+          task: config.task,
+          comments: 'Restaurado após validação automatizada dos modelos RAG.',
+          date: testDate,
+          duration: formatDurationMinutes(ahgoraMinutes),
+          durationMinutes: ahgoraMinutes,
+          expectedExistingMinutes: 0,
+          timeoutMs: 30_000,
+        } satisfies InjectedChannelFillInput);
+        if (!['filled', 'already-correct'].includes(restored.status))
+          throw new Error(
+            `CHANNEL_RAG_RESTORE_${restored.status}_${restored.code ?? 'NO_CODE'}`,
+          );
+      };
+
+      try {
+        await loginAhgora(ahgora, config);
+        const source = await ahgora.evaluate(captureAhgoraByApi, {
+          months: ['2026-08' as const],
+          timeoutMs: 30_000,
+        });
+        if (!source.ok) throw new Error(`AHGORA_RAG_${source.code}`);
+        const record = calculatePunchDays(
+          source.months.flatMap(({ days }) => days),
+          config.overrides,
+        ).records.find(({ date }) => date === testDate);
+        if (!record || record.durationMinutes <= 2)
+          throw new Error('AHGORA_RAG_DAY_DURATION_UNAVAILABLE');
+        ahgoraMinutes = record.durationMinutes;
+
+        await loginChannel(channel, config);
+        await safeNavigate(
+          channel,
+          config.channelExtractUrl,
+          'CHANNEL_EXTRACT_NAVIGATION_FAILED',
+        );
+        await channel
+          .locator('#totalItensPagina')
+          .waitFor({ state: 'visible', timeout: 30_000 });
+        const before = await readDay();
+        console.info('CHANNEL_RAG_REAL_BEFORE', {
+          date: testDate,
+          total: before?.duration ?? '00:00',
+          markingCount: before?.markings?.length ?? 0,
+        });
+
+        await clearDay();
+        cleared = true;
+        const project = await channel.evaluate(runInjectedChannelApiWrite, {
+          kind: 'PROJETOS',
+          project: config.project,
+          activityType: config.activityType,
+          activity: config.activity,
+          task: config.task,
+          comments: 'Teste automatizado RAG — modelo Projeto.',
+          date: testDate,
+          duration: '00:01',
+          durationMinutes: 1,
+          expectedExistingMinutes: 0,
+          timeoutMs: 30_000,
+        } satisfies InjectedChannelFillInput);
+        expect(project).toMatchObject({
+          status: 'filled',
+          resultingMinutes: 1,
+        });
+
+        const adHoc = await channel.evaluate(runInjectedChannelApiWrite, {
+          kind: 'AVULSO',
+          client: 'CERTI',
+          operationNature: '13. Formação/Capacitação',
+          activityType: '99601 - Lightning Talk',
+          comments: 'Teste automatizado RAG — modelo Avulso.',
+          date: testDate,
+          duration: '00:01',
+          durationMinutes: 1,
+          expectedExistingMinutes: 1,
+          timeoutMs: 30_000,
+        } satisfies InjectedChannelFillInput);
+        expect(adHoc).toMatchObject({ status: 'filled', resultingMinutes: 2 });
+
+        const verified = await readDay();
+        expect(verified).toMatchObject({ durationMinutes: 2 });
+        expect(verified?.markings).toHaveLength(2);
+        expect(
+          verified?.markings?.some((marking) =>
+            marking.project?.includes(config.project.replace(/^\S+\s+/, '')),
+          ),
+        ).toBe(true);
+        console.info('CHANNEL_RAG_REAL_MODELS_CONFIRMED', {
+          date: testDate,
+          total: verified?.duration,
+          markingCount: verified?.markings?.length,
+          models: ['PROJETOS', 'AVULSO'],
+        });
+      } finally {
+        if (cleared) {
+          await restoreDefault();
+          const restored = await readDay();
+          expect(restored).toMatchObject({ durationMinutes: ahgoraMinutes });
+          expect(restored?.markings).toHaveLength(1);
+          expect(restored?.markings?.[0]?.project).toContain(
+            config.project.replace(/^\S+\s+/, ''),
+          );
+          console.info('CHANNEL_RAG_REAL_RESTORED', {
+            date: testDate,
+            total: restored?.duration,
+            markingCount: restored?.markings?.length,
+          });
+        }
+        await context.close();
+        await browser.close();
+      }
+    });
+  },
+);
 
 interface AuthenticatedConfig extends OperationConfig {
   readonly ahgoraLoginUrl: string;

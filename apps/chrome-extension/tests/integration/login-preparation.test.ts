@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { submitAutofilledLogin } from '../../src/sites/login';
+import {
+  probeLoginDocument,
+  submitAutofilledLogin,
+} from '../../src/sites/login';
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -93,6 +96,35 @@ describe('preparação das páginas de login', () => {
         passwordSelector: '[name="password"]',
         loginPathnames: ['/login'],
         timeoutMs: 10_000,
+      }),
+    ).resolves.toBe('already-authenticated');
+  });
+
+  it('reconhece sessão autenticada quando o Ahgora mantém o formulário oculto no DOM', async () => {
+    document.body.innerHTML = `
+      <section aria-hidden="true">
+        <form id="boxLogin">
+          <input name="matricula">
+          <input name="senha" type="password">
+        </form>
+      </section>
+      <iframe id="mirror"></iframe>
+    `;
+    vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
+
+    expect(probeLoginDocument('#boxLogin', '#mirror')).toMatchObject({
+      ready: true,
+      formPresent: true,
+      formVisible: false,
+      workMarkerPresent: true,
+    });
+    await expect(
+      submitAutofilledLogin({
+        formSelector: '#boxLogin',
+        usernameSelector: '[name="matricula"]',
+        passwordSelector: '[name="senha"]',
+        loginPathnames: ['/externo/index/a128879'],
+        timeoutMs: 10,
       }),
     ).resolves.toBe('already-authenticated');
   });

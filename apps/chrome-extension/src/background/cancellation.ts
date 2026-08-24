@@ -11,6 +11,10 @@ export class CancellationRegistry {
     return this.operationIds.has(operationId);
   }
 
+  clear(operationId: string): void {
+    this.operationIds.delete(operationId);
+  }
+
   resetAfterOperationStarted(): void {
     this.operationIds.clear();
   }
@@ -23,7 +27,10 @@ export function createCancellationAwareHandler<TSender, TResponse>(
 ): (message: IncomingMessage, sender: TSender) => Promise<TResponse> {
   return (message, sender) => {
     authorize(sender);
-    if (message.type === 'CANCEL_OPERATION') {
+    if (
+      message.type === 'CANCEL_OPERATION' ||
+      message.type === 'STOP_CURRENT_ACTION'
+    ) {
       registry.request(message.operationId);
     }
     return process(message, sender);

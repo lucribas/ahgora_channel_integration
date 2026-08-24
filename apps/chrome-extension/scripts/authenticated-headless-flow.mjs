@@ -40,6 +40,7 @@ const profilePath = resolve(temporaryRoot, 'profile');
 let context;
 try {
   await prepareExtension(extensionPath, [
+    originPattern(config.ahgoraLoginUrl),
     originPattern(config.ahgoraMirrorUrl),
     originPattern(config.channelExtractUrl),
   ]);
@@ -113,6 +114,16 @@ try {
           phase: 'setup',
           sourceTab: registered.source,
           targetTab: registered.target,
+          loginPreparation: {
+            ahgora: 'awaiting-user',
+            channel: 'awaiting-user',
+            ahgoraDetail: 'Aguardando detecção passiva do teste.',
+            channelDetail: 'Aguardando detecção passiva do teste.',
+            autoSubmit: true,
+            permissionDenied: false,
+            sourceTabId: registered.source.id,
+            targetTabId: registered.target.id,
+          },
           items: [],
           queue: [],
           queueIndex: 0,
@@ -125,6 +136,35 @@ try {
 
   const panel = await context.newPage();
   await panel.goto(`chrome-extension://${extensionId}/src/ui/side-panel.html`);
+  const monitoredLogins = await waitForLoginMonitor(panel, operationId);
+  if (
+    monitoredLogins.state.loginPreparation?.ahgora !== 'ready' ||
+    monitoredLogins.state.loginPreparation?.channel !== 'ready'
+  ) {
+    console.warn(
+      JSON.stringify({
+        stage: 'login-monitor-not-ready',
+        ahgora: monitoredLogins.state.loginPreparation?.ahgora,
+        channel: monitoredLogins.state.loginPreparation?.channel,
+        ahgoraDetail: monitoredLogins.state.loginPreparation?.ahgoraDetail,
+        channelDetail: monitoredLogins.state.loginPreparation?.channelDetail,
+      }),
+    );
+    throw new Error('existing-login-session-not-detected');
+  }
+  await panel
+    .locator('#login-card:not([open])')
+    .waitFor({ state: 'attached', timeout: 5_000 });
+  const loginCardCollapsed = true;
+  console.log(
+    JSON.stringify({
+      stage: 'login-monitor',
+      ahgora: monitoredLogins.state.loginPreparation.ahgora,
+      channel: monitoredLogins.state.loginPreparation.channel,
+      detectedWithoutSubmit: true,
+      loginCardCollapsed,
+    }),
+  );
   await worker.evaluate(() => {
     globalThis.__authenticatedCaptureProgress = [];
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -137,17 +177,52 @@ try {
       });
     });
   });
+  const catalogResponse = await send(panel, {
+    type: 'FETCH_CHANNEL_CATALOG',
+    operationId,
+  });
+  assertSuccess(catalogResponse, 'fetch-channel-catalog');
+  const catalogProject = catalogResponse.catalog?.projects.find((project) =>
+    project.label.startsWith(config.project),
+  );
+  const catalogActivity = catalogProject?.activities.find((activity) =>
+    activity.label.startsWith(config.activity),
+  );
+  if (!catalogProject || !catalogActivity)
+    throw new Error('configured-tag-options-not-found-in-catalog');
+  const defaultTag = {
+    id: 'authenticated-default',
+    name: 'Padrão autenticado',
+    projectId: catalogProject.id,
+    project: catalogProject.label,
+    activityId: catalogActivity.id,
+    activity: catalogActivity.label,
+  };
+  const operationConfig = {
+    project: defaultTag.project,
+    activity: defaultTag.activity,
+    activityType: config.activityType,
+    task: config.task,
+    period: config.period,
+    overrides: config.overrides,
+    tags: [defaultTag],
+    defaultTagId: defaultTag.id,
+  };
+  console.log(
+    JSON.stringify({
+      stage: 'catalog',
+      projectCount: catalogResponse.catalog.projects.length,
+      activityCount: catalogResponse.catalog.projects.reduce(
+        (total, project) => total + project.activities.length,
+        0,
+      ),
+      configuredTagFound: true,
+    }),
+  );
   const preview = await send(panel, {
     type: 'CAPTURE_AND_COMPARE',
     operationId,
-    config: {
-      project: config.project,
-      activity: config.activity,
-      activityType: config.activityType,
-      task: config.task,
-      period: config.period,
-      overrides: config.overrides,
-    },
+    config: operationConfig,
   });
   assertSuccess(preview, 'capture-and-compare');
   const progressHistory = await worker.evaluate(
@@ -178,6 +253,14 @@ try {
     throw new Error('preview-dates-incomplete');
   if (items.some((item) => item.ahgoraDuration === '—'))
     throw new Error('preview-ahgora-duration-unavailable');
+  if (
+    items.some(
+      (item) =>
+        item.status !== 'missing' &&
+        (!item.channelProject || !item.channelActivity),
+    )
+  )
+    throw new Error('preview-channel-assignment-unavailable');
 
   console.log(
     JSON.stringify({
@@ -189,6 +272,9 @@ try {
         date: item.date,
         ahgoraDuration: item.ahgoraDuration,
         channelDuration: item.channelDuration,
+        channelProject: item.channelProject,
+        channelActivity: item.channelActivity,
+        tagId: item.tagId,
         status: item.status,
         warning: item.warning,
       })),
@@ -245,14 +331,7 @@ try {
     const verified = await send(panel, {
       type: 'CAPTURE_AND_COMPARE',
       operationId: verificationId,
-      config: {
-        project: config.project,
-        activity: config.activity,
-        activityType: config.activityType,
-        task: config.task,
-        period: config.period,
-        overrides: config.overrides,
-      },
+      config: operationConfig,
     });
     assertSuccess(verified, 'post-write-verification');
     const verifiedItems = verified.state.items.filter((item) =>
@@ -271,6 +350,8 @@ try {
           date: item.date,
           ahgoraDuration: item.ahgoraDuration,
           channelDuration: item.channelDuration,
+          channelProject: item.channelProject,
+          channelActivity: item.channelActivity,
           status: item.status,
         })),
       }),
@@ -357,6 +438,23 @@ function send(page, message) {
     (candidate) => chrome.runtime.sendMessage(candidate),
     message,
   );
+}
+
+async function waitForLoginMonitor(page, operationId) {
+  const deadline = Date.now() + 30_000;
+  let lastResponse;
+  while (Date.now() <= deadline) {
+    lastResponse = await send(page, { type: 'GET_STATE' });
+    assertSuccess(lastResponse, 'monitor-existing-logins');
+    if (
+      lastResponse.state.operationId === operationId &&
+      lastResponse.state.loginPreparation?.ahgora === 'ready' &&
+      lastResponse.state.loginPreparation?.channel === 'ready'
+    )
+      return lastResponse;
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 250));
+  }
+  return lastResponse;
 }
 
 function assertSuccess(response, stage) {

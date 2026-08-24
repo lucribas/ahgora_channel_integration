@@ -6,6 +6,8 @@ type UnknownRecord = Record<string, unknown>;
 const MESSAGE_TYPES = new Set<IncomingMessage['type']>([
   'GET_STATE',
   'START_OPERATION',
+  'FETCH_CHANNEL_CATALOG',
+  'CHECK_LOGIN_STATUS',
   'OPEN_LOGIN_PAGES',
   'SET_PENDING_ROLE',
   'REGISTER_ACTIVE_TAB',
@@ -13,10 +15,18 @@ const MESSAGE_TYPES = new Set<IncomingMessage['type']>([
   'CAPTURE_SOURCE',
   'SHOW_PREVIEW',
   'SET_ITEM_DECISION',
+  'SET_ITEM_TAG',
+  'UPDATE_ALLOCATION',
+  'SET_ALLOCATION_TAG',
+  'SET_ALLOCATION_RAG',
+  'REMOVE_ALLOCATION',
+  'APPLY_MARKING_TEMPLATE',
+  'DELETE_CHANNEL_MARKING',
   'SELECT_REMAINING',
   'RUN_DRY_RUN',
   'APPLY_SELECTED',
   'ADVANCE_QUEUE',
+  'STOP_CURRENT_ACTION',
   'CANCEL_OPERATION',
 ]);
 
@@ -55,7 +65,54 @@ export function isIncomingMessage(value: unknown): value is IncomingMessage {
         isOperationId(value.itemId) &&
         (value.decision === 'selected' || value.decision === 'refused')
       );
+    case 'SET_ITEM_TAG':
+      return isOperationId(value.itemId) && isOperationId(value.tagId);
+    case 'UPDATE_ALLOCATION':
+      return (
+        isOperationId(value.itemId) &&
+        isOperationId(value.allocationId) &&
+        (value.mode === 'percentage' || value.mode === 'duration') &&
+        typeof value.value === 'string' &&
+        value.value.length > 0 &&
+        value.value.length <= 16
+      );
+    case 'SET_ALLOCATION_TAG':
+      return (
+        isOperationId(value.itemId) &&
+        isOperationId(value.allocationId) &&
+        isOperationId(value.tagId)
+      );
+    case 'SET_ALLOCATION_RAG':
+      return (
+        isOperationId(value.itemId) &&
+        isOperationId(value.allocationId) &&
+        isOperationId(value.catalogId) &&
+        isOperationId(value.ragItemId)
+      );
+    case 'REMOVE_ALLOCATION':
+      return isOperationId(value.itemId) && isOperationId(value.allocationId);
+    case 'APPLY_MARKING_TEMPLATE':
+      return (
+        isOperationId(value.itemId) &&
+        isRecord(value.template) &&
+        isOperationId(value.template.id) &&
+        typeof value.template.name === 'string' &&
+        Array.isArray(value.template.entries) &&
+        (value.basis === 'percentage' || value.basis === 'duration') &&
+        (value.overflowStrategy === 'reject' ||
+          value.overflowStrategy === 'scale')
+      );
+    case 'DELETE_CHANNEL_MARKING':
+      return isOperationId(value.itemId) && isOperationId(value.markingId);
+    case 'STOP_CURRENT_ACTION':
+      return (
+        value.action === 'login' ||
+        value.action === 'capture' ||
+        value.action === 'write'
+      );
     case 'START_OPERATION':
+    case 'FETCH_CHANNEL_CATALOG':
+    case 'CHECK_LOGIN_STATUS':
     case 'CAPTURE_SOURCE':
     case 'SELECT_REMAINING':
     case 'RUN_DRY_RUN':

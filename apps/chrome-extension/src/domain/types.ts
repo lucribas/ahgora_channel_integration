@@ -10,6 +10,8 @@ export interface WorkRecord {
 export interface ComparableWorkRecord extends WorkRecord {
   /** Texto observado no Ruby; a comparação de paridade é textual. */
   readonly duration: string;
+  readonly project?: string;
+  readonly activity?: string;
 }
 
 export interface PunchDay {

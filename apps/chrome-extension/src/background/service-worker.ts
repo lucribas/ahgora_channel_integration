@@ -1,5 +1,10 @@
 import { loadOperationData, saveOperationData } from '../application/storage';
 import {
+  loadExtensionSettings,
+  saveExtensionSettings,
+  type ChannelCatalog,
+} from '../application/settings';
+import {
   emptyOperation,
   publicState,
   type CaptureProgress,
@@ -18,15 +23,22 @@ import {
 } from '../messaging/validation';
 import { toSafeDiagnostic } from '../shared/diagnostics';
 import { captureAhgora, ChromeSourceScriptRunner } from '../sites/source';
-import { executeChannelFill, executeChannelRead } from '../sites/target';
+import {
+  executeChannelCatalog,
+  executeChannelDelete,
+  executeChannelFill,
+  executeChannelRead,
+} from '../sites/target';
 import {
   LOGIN_PERMISSION_ORIGINS,
   LOGIN_SITES,
+  probeLoginDocument,
   submitAutofilledLogin,
   type LoginSiteDefinition,
 } from '../sites/login';
 import {
   advanceQueue,
+  applyTemplateToItem,
   cancelOperation,
   captureAndCompareOperation,
   completeDryRun,
@@ -34,7 +46,12 @@ import {
   fillCurrentQueueItem,
   fillSelectedQueue,
   prepareSelectedQueue,
+  removeAllocation,
+  setAllocationRag,
+  setAllocationTag,
+  selectItemTag,
   selectRemainingItems,
+  updateAllocation,
   type CoordinatorAdapters,
 } from './coordinator';
 import {
@@ -147,7 +164,25 @@ async function processMessage(message: IncomingMessage): Promise<UiResponse> {
     return state ? success(state) : { ok: false, code: 'NO_ACTIVE_OPERATION' };
   }
   if (message.type === 'START_OPERATION') {
-    const state = emptyOperation(message.operationId);
+    const previous = await loadOperationData();
+    const empty = emptyOperation(message.operationId);
+    const connectionsReady = Boolean(previous?.sourceTab && previous.targetTab);
+    const state: OperationData = connectionsReady
+      ? {
+          ...empty,
+          sourceTab: previous?.sourceTab,
+          targetTab: previous?.targetTab,
+          loginPreparation: previous?.loginPreparation ?? {
+            ahgora: 'ready',
+            channel: 'ready',
+            ahgoraDetail: 'Conexão preservada da operação anterior.',
+            channelDetail: 'Conexão preservada da operação anterior.',
+            autoSubmit: false,
+          },
+          message:
+            'Nova operação iniciada com as conexões Ahgora e Channel preservadas.',
+        }
+      : empty;
     await saveOperationData(state);
     cancellationRegistry.resetAfterOperationStarted();
     return success(state);
@@ -157,9 +192,50 @@ async function processMessage(message: IncomingMessage): Promise<UiResponse> {
   if (state === undefined) return { ok: false, code: 'NO_ACTIVE_OPERATION' };
   assertCurrentOperation(message, state.operationId);
 
+  if (message.type === 'STOP_CURRENT_ACTION') {
+    const stopped = stopCurrentAction(state, message.action);
+    await saveOperationData(stopped);
+    return success(stopped);
+  }
+
+  if (message.type === 'CHECK_LOGIN_STATUS') {
+    return success(await monitorPreparedLogins(state));
+  }
+
+  if (message.type === 'FETCH_CHANNEL_CATALOG') {
+    if (!state.targetTab)
+      throw new OperationalError('Conecte a aba Channel antes de consultar.');
+    await assertTabBinding(state.targetTab);
+    const result = await executeChannelCatalog(state.targetTab.id);
+    if (!result.ok)
+      throw new OperationalError(
+        `Não foi possível obter projetos e atividades do Channel: ${result.code}.`,
+      );
+    const catalog: ChannelCatalog = {
+      fetchedAt: new Date().toISOString(),
+      projects: result.projects,
+    };
+    const settings = await loadExtensionSettings();
+    await saveExtensionSettings({ ...settings, catalog });
+    const latest = await loadOperationData();
+    if (
+      latest?.operationId !== state.operationId ||
+      latest.revision !== state.revision
+    )
+      throw new OperationalError('A operação mudou durante a consulta.');
+    const committed: OperationData = {
+      ...latest,
+      revision: latest.revision + 1,
+      message: `${String(catalog.projects.length)} projeto(s) e ${String(catalog.projects.reduce((total, project) => total + project.activities.length, 0))} atividade(s) armazenados no cache local.`,
+    };
+    await saveOperationData(committed);
+    return success(committed, catalog);
+  }
+
   if (message.type === 'OPEN_LOGIN_PAGES') {
     if (state.inFlight !== undefined)
       throw new OperationalError('Aguarde a ação atual terminar ou cancele.');
+    cancellationRegistry.clear(state.operationId);
     return success(await openLoginPages(state, message.autoSubmit));
   }
 
@@ -174,6 +250,7 @@ async function processMessage(message: IncomingMessage): Promise<UiResponse> {
   }
 
   if (message.type === 'CAPTURE_AND_COMPARE') {
+    cancellationRegistry.clear(state.operationId);
     const prepared: OperationData = {
       ...state,
       config: message.config,
@@ -209,7 +286,64 @@ async function processMessage(message: IncomingMessage): Promise<UiResponse> {
       return result;
     });
   }
+  if (message.type === 'DELETE_CHANNEL_MARKING') {
+    const item = state.items.find(
+      (candidate) => candidate.id === message.itemId,
+    );
+    const marking = item?.channelMarkings?.find(
+      (candidate) => candidate.id === message.markingId,
+    );
+    if (!item || !marking)
+      throw new OperationalError(
+        'A marcação não pertence mais à prévia. Capture e compare novamente.',
+      );
+    if (!marking.canDelete)
+      throw new OperationalError(
+        'O Channel não permite excluir esta marcação.',
+      );
+    const prepared: OperationData = {
+      ...state,
+      message: `Excluindo a marcação ${marking.duration} de ${formatDateForMessage(item.date)} no Channel…`,
+    };
+    return runEffect(prepared, 'delete', async (locked) => {
+      await assertRegisteredTabs(locked);
+      if (!locked.targetTab)
+        throw new Error('A aba Channel não está registrada.');
+      const deleted = await executeChannelDelete(locked.targetTab.id, {
+        id: marking.id,
+        date: item.date,
+      });
+      if (!deleted.ok)
+        throw new Error(channelDeleteFailureMessage(deleted.code));
+      let refreshed: OperationData;
+      try {
+        refreshed = await captureAndCompareOperation(
+          locked,
+          coordinatorAdapters(),
+        );
+      } catch {
+        throw new Error(
+          'A marcação foi excluída do Channel, mas não foi possível atualizar a prévia. Capture e compare novamente.',
+        );
+      }
+      await updateBadge(
+        String(
+          Math.min(
+            refreshed.items.filter(
+              (candidate) => candidate.status === 'missing',
+            ).length,
+            99,
+          ),
+        ),
+      );
+      return {
+        ...refreshed,
+        message: `Marcação ${marking.duration} de ${formatDateForMessage(item.date)} excluída do Channel e prévia atualizada.`,
+      };
+    });
+  }
   if (message.type === 'APPLY_SELECTED') {
+    cancellationRegistry.clear(state.operationId);
     return runEffect(prepareSelectedQueue(state), 'apply', async (locked) => {
       await assertRegisteredTabs(locked);
       const result = await fillSelectedQueue(
@@ -247,6 +381,47 @@ async function processMessage(message: IncomingMessage): Promise<UiResponse> {
     case 'SET_ITEM_DECISION':
       next = decideItem(state, message.itemId, message.decision);
       break;
+    case 'SET_ITEM_TAG':
+      next = selectItemTag(state, message.itemId, message.tagId);
+      break;
+    case 'SET_ALLOCATION_TAG':
+      next = setAllocationTag(
+        state,
+        message.itemId,
+        message.allocationId,
+        message.tagId,
+      );
+      break;
+    case 'SET_ALLOCATION_RAG':
+      next = setAllocationRag(
+        state,
+        message.itemId,
+        message.allocationId,
+        message.catalogId,
+        message.ragItemId,
+      );
+      break;
+    case 'UPDATE_ALLOCATION':
+      next = updateAllocation(
+        state,
+        message.itemId,
+        message.allocationId,
+        message.mode,
+        message.value,
+      );
+      break;
+    case 'REMOVE_ALLOCATION':
+      next = removeAllocation(state, message.itemId, message.allocationId);
+      break;
+    case 'APPLY_MARKING_TEMPLATE':
+      next = applyTemplateToItem(
+        state,
+        message.itemId,
+        message.template,
+        message.basis,
+        message.overflowStrategy,
+      );
+      break;
     case 'SELECT_REMAINING':
       next = selectRemainingItems(state);
       break;
@@ -272,10 +447,36 @@ async function processMessage(message: IncomingMessage): Promise<UiResponse> {
   return success(committed);
 }
 
+function formatDateForMessage(date: string): string {
+  const [year, month, day] = date.split('-');
+  return year && month && day ? `${day}/${month}/${year}` : date;
+}
+
+function channelDeleteFailureMessage(code: string): string {
+  return (
+    (
+      {
+        'login-required': 'Conclua o login do Channel e tente novamente.',
+        'marking-not-found':
+          'A marcação não existe mais no Channel. Capture e compare novamente.',
+        'marking-delete-not-permitted':
+          'O Channel não permite excluir esta marcação.',
+        'delete-not-confirmed':
+          'O Channel recebeu a exclusão, mas ainda mantém a marcação. Capture e compare antes de tentar novamente.',
+        'channel-participant-unavailable':
+          'O Channel não informou o participante necessário para confirmar a exclusão.',
+        'channel-delete-api-unavailable':
+          'A API de exclusão não está disponível na aba Channel registrada.',
+      } as Readonly<Record<string, string>>
+    )[code] ?? `Não foi possível excluir a marcação no Channel: ${code}.`
+  );
+}
+
 async function openLoginPages(
   state: OperationData,
   autoSubmit: boolean,
 ): Promise<OperationData> {
+  assertActionNotStopped(state.operationId);
   let current = await commitLoginPreparation(
     state,
     {
@@ -308,6 +509,7 @@ async function openLoginPages(
     sourceResult.status === 'fulfilled' ? sourceResult.value.id : undefined;
   const targetTabId =
     targetResult.status === 'fulfilled' ? targetResult.value.id : undefined;
+  assertActionNotStopped(state.operationId);
   current = await commitLoginPreparation(
     current,
     {
@@ -335,6 +537,7 @@ async function openLoginPages(
       : 'A permissão foi recusada. Ela é necessária para detectar e concluir os logins automaticamente; conceda-a na nova tentativa ou faça o processo manual.',
   );
   if (!autoSubmit) return current;
+  assertActionNotStopped(state.operationId);
 
   const [ahgora, channel] = await Promise.all([
     sourceTabId === undefined
@@ -344,6 +547,7 @@ async function openLoginPages(
       ? Promise.resolve<LoginSiteStatus>('failed')
       : attemptAutomaticLogin(LOGIN_SITES[1], targetTabId, state.operationId),
   ]);
+  assertActionNotStopped(state.operationId);
   const ready = ahgora === 'ready' && channel === 'ready';
   const latestProgress = await loadOperationData();
   const latestPreparation =
@@ -374,6 +578,7 @@ async function openLoginPages(
 async function registerPreparedTabs(
   state: OperationData,
 ): Promise<OperationData> {
+  assertActionNotStopped(state.operationId);
   const preparation = state.loginPreparation;
   if (!preparation?.autoSubmit) return state;
   const permissionGranted = await chrome.permissions.contains({
@@ -423,6 +628,7 @@ async function commitLoginPreparation(
   loginPreparation: LoginPreparation,
   message: string,
 ): Promise<OperationData> {
+  assertActionNotStopped(expected.operationId);
   const latest = await loadOperationData();
   if (latest?.operationId !== expected.operationId)
     throw new OperationalError('A operação foi substituída.');
@@ -441,6 +647,7 @@ async function attemptAutomaticLogin(
   tabId: number,
   operationId: string,
 ): Promise<LoginSiteStatus> {
+  assertActionNotStopped(operationId);
   if (activeLoginAttempts.has(tabId)) return 'submitted';
   activeLoginAttempts.add(tabId);
   try {
@@ -450,7 +657,8 @@ async function attemptAutomaticLogin(
       'opening',
       'Carregando o formulário e aguardando o preenchimento automático…',
     );
-    await waitForTabComplete(tabId, 15_000);
+    await waitForTabReady(tabId, 15_000);
+    assertActionNotStopped(operationId);
     const [execution] = await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
@@ -482,6 +690,7 @@ async function attemptAutomaticLogin(
         'Login enviado; confirmando a sessão…',
       );
       const authenticated = await waitForLoginCompletion(site, tabId, 15_000);
+      assertActionNotStopped(operationId);
       if (!authenticated) {
         await reportLoginProgress(
           operationId,
@@ -501,6 +710,7 @@ async function attemptAutomaticLogin(
       );
     }
     const confirmed = await openAndConfirmWorkPage(site, tabId);
+    assertActionNotStopped(operationId);
     if (!confirmed) {
       await reportLoginProgress(
         operationId,
@@ -536,7 +746,10 @@ async function attemptAutomaticLogin(
   }
 }
 
-async function resumePreparedLogin(tabId: number): Promise<void> {
+async function resumePreparedLogin(
+  tabId: number,
+  passive = false,
+): Promise<void> {
   if (activeLoginAttempts.has(tabId)) return;
   const state = await loadOperationData();
   const preparation = state?.loginPreparation;
@@ -549,13 +762,32 @@ async function resumePreparedLogin(tabId: number): Promise<void> {
         : undefined;
   if (role === undefined) return;
   const status = role === 'source' ? preparation.ahgora : preparation.channel;
-  if (status === 'ready' || status === 'failed' || status === 'idle') return;
+  if (
+    status === 'ready' ||
+    status === 'failed' ||
+    status === 'idle' ||
+    status === 'stopped'
+  )
+    return;
   const permissionGranted = await chrome.permissions.contains({
     origins: [...LOGIN_PERMISSION_ORIGINS],
   });
   if (!permissionGranted) return;
 
   const site = role === 'source' ? LOGIN_SITES[0] : LOGIN_SITES[1];
+  if (passive) {
+    try {
+      const [probe] = await chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: probeLoginDocument,
+        args: [site.formSelector],
+      });
+      if (!probe?.result?.ready || probe.result.formVisible) return;
+    } catch {
+      return;
+    }
+  }
   const result = await attemptAutomaticLogin(site, tabId, state.operationId);
   const latest = await loadOperationData();
   if (latest?.operationId !== state.operationId || !latest.loginPreparation)
@@ -588,6 +820,22 @@ async function resumePreparedLogin(tabId: number): Promise<void> {
   if (result === 'ready') await registerPreparedTabs(updated);
 }
 
+async function monitorPreparedLogins(
+  state: OperationData,
+): Promise<OperationData> {
+  const preparation = state.loginPreparation;
+  if (!preparation?.autoSubmit) return state;
+  const pendingTabIds = [
+    preparation.ahgora === 'ready' ? undefined : preparation.sourceTabId,
+    preparation.channel === 'ready' ? undefined : preparation.targetTabId,
+  ];
+  for (const tabId of pendingTabIds) {
+    if (tabId !== undefined) await resumePreparedLogin(tabId, true);
+  }
+  const latest = await loadOperationData();
+  return latest?.operationId === state.operationId ? latest : state;
+}
+
 async function openAndConfirmWorkPage(
   site: LoginSiteDefinition,
   tabId: number,
@@ -607,13 +855,15 @@ async function openAndConfirmWorkPage(
           const [probe] = await chrome.scripting.executeScript({
             target: { tabId },
             world: 'MAIN',
-            func: (formSelector: string) => ({
-              formVisible: document.querySelector(formSelector) !== null,
-              ready: document.readyState !== 'loading',
-            }),
-            args: [site.formSelector],
+            func: probeLoginDocument,
+            args: [site.formSelector, site.workSelector],
           });
-          if (probe?.result?.ready && !probe.result.formVisible) return true;
+          if (
+            probe?.result?.ready &&
+            !probe.result.formVisible &&
+            (probe.result.workMarkerPresent || tab.status === 'complete')
+          )
+            return true;
         }
       }
     } catch {
@@ -648,6 +898,7 @@ function loginDetail(siteName: string, status: LoginSiteStatus): string {
     submitted: `Login enviado ao ${siteName}; a sessão ainda não foi confirmada.`,
     ready: `Login do ${siteName} confirmado; página de trabalho aberta.`,
     failed: `Não foi possível abrir ${siteName}.`,
+    stopped: `Login do ${siteName} interrompido pelo usuário.`,
   }[status];
 }
 
@@ -657,7 +908,9 @@ async function reportLoginProgress(
   status: LoginSiteStatus,
   detail: string,
 ): Promise<void> {
+  if (cancellationRegistry.isRequested(operationId)) return;
   const write = loginProgressWrites.then(async () => {
+    if (cancellationRegistry.isRequested(operationId)) return;
     const current = await loadOperationData();
     if (current?.operationId !== operationId || !current.loginPreparation)
       return;
@@ -678,11 +931,21 @@ async function reportLoginProgress(
   await write;
 }
 
-async function waitForTabComplete(tabId: number, timeoutMs: number) {
+async function waitForTabReady(tabId: number, timeoutMs: number) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {
     const tab = await chrome.tabs.get(tabId);
     if (tab.status === 'complete') return;
+    try {
+      const [probe] = await chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: () => document.readyState !== 'loading',
+      });
+      if (probe?.result) return;
+    } catch {
+      // O documento pode estar sendo substituído durante o redirecionamento.
+    }
     await delay(100);
   }
   throw new Error('tab-load-timeout');
@@ -699,10 +962,7 @@ async function waitForLoginCompletion(
       const [probe] = await chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
-        func: (formSelector: string) => ({
-          formVisible: document.querySelector(formSelector) !== null,
-          ready: document.readyState !== 'loading',
-        }),
+        func: probeLoginDocument,
         args: [site.formSelector],
       });
       if (probe?.result?.ready && !probe.result.formVisible) return true;
@@ -716,6 +976,85 @@ async function waitForLoginCompletion(
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds));
+}
+
+function assertActionNotStopped(operationId: string): void {
+  if (cancellationRegistry.isRequested(operationId))
+    throw new OperationalError('Ação interrompida pelo usuário.');
+}
+
+function stopCurrentAction(
+  state: OperationData,
+  action: 'login' | 'capture' | 'write',
+): OperationData {
+  const stopSystem = (progress: CaptureProgress['ahgora']) =>
+    progress.status === 'running'
+      ? {
+          ...progress,
+          status: 'stopped' as const,
+          detail: 'Interrompido pelo usuário.',
+        }
+      : progress;
+  const preparation = state.loginPreparation;
+  const loginPreparation =
+    action === 'login' && preparation
+      ? {
+          ...preparation,
+          ahgora:
+            preparation.ahgora === 'ready'
+              ? ('ready' as const)
+              : ('stopped' as const),
+          channel:
+            preparation.channel === 'ready'
+              ? ('ready' as const)
+              : ('stopped' as const),
+          ahgoraDetail:
+            preparation.ahgora === 'ready'
+              ? preparation.ahgoraDetail
+              : 'Login interrompido pelo usuário.',
+          channelDetail:
+            preparation.channel === 'ready'
+              ? preparation.channelDetail
+              : 'Login interrompido pelo usuário.',
+          autoSubmit: false,
+        }
+      : preparation;
+  return {
+    ...state,
+    revision: state.revision + 1,
+    inFlight: undefined,
+    ...(loginPreparation === undefined ? {} : { loginPreparation }),
+    ...(action === 'capture' && state.captureProgress
+      ? {
+          captureProgress: {
+            ahgora: stopSystem(state.captureProgress.ahgora),
+            channel: stopSystem(state.captureProgress.channel),
+          },
+        }
+      : {}),
+    ...(action === 'write' && state.writeProgress
+      ? {
+          writeProgress: {
+            ...state.writeProgress,
+            status: 'stopped' as const,
+            detail:
+              'Envio interrompido. Capture e compare novamente antes de retomar.',
+          },
+        }
+      : {}),
+    phase:
+      action === 'capture'
+        ? 'setup'
+        : action === 'write'
+          ? 'failed'
+          : state.phase,
+    message:
+      action === 'login'
+        ? 'Login interrompido pelo usuário.'
+        : action === 'capture'
+          ? 'Captura interrompida pelo usuário.'
+          : 'Envio interrompido. Capture e compare novamente para reconciliar o Channel.',
+  };
 }
 
 async function runEffect(
@@ -764,6 +1103,8 @@ function coordinatorAdapters(
         period,
       }),
     readTarget: executeChannelRead,
+    cancellationRequested: (operationId) =>
+      cancellationRegistry.isRequested(operationId),
     writeTarget: (state, assignment) =>
       executeValidatedChannelFill(state, assignment, {
         validateTab: assertTabBinding,
@@ -934,8 +1275,12 @@ async function updateBadge(text: string): Promise<void> {
   });
 }
 
-function success(state: OperationData): UiResponse {
-  return { ok: true, state: publicState(state) };
+function success(state: OperationData, catalog?: ChannelCatalog): UiResponse {
+  return {
+    ok: true,
+    state: publicState(state),
+    ...(catalog === undefined ? {} : { catalog }),
+  };
 }
 
 chrome.runtime.onMessage.addListener(

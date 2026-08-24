@@ -8,8 +8,16 @@ Execute somente com autorização e participação do usuário. Não copie HTML,
 - [ ] **Abrir páginas e tentar login** abre exatamente Ahgora e Channel; conceder a permissão opcional permite acionar campos já preenchidos e registra ambas as abas automaticamente.
 - [ ] **Acesso manual** fica oculto quando as duas abas foram conectadas e aparece somente se a permissão/login automático não concluir.
 - [ ] A extensão não registra nem retorna conteúdo dos campos de login; autofill ausente nunca dispara submit.
-- [ ] Projeto/atividade de teste foram escolhidos pelo usuário; nenhuma credencial foi fornecida à extensão.
+- [ ] Uma sessão Ahgora já autenticada é reconhecida mesmo se `#boxLogin` continuar oculto no DOM e sem ocorrer nova navegação da aba.
+- [ ] Quando Ahgora e Channel ficam conectados, a etapa 1 recolhe automaticamente, mostra `Concluído` e continua acessível pelo título.
+- [ ] O catálogo foi obtido do Channel; a contagem e a data do cache aparecem sem expor credenciais.
+- [ ] Uma TAG com projeto, atividade, tipo de atividade e tarefa foi salva, escolhida como padrão e persistiu após fechar/reabrir o painel.
+- [ ] Os controles `A−`/`A+` alteram e persistem o tamanho das letras sem quebrar o layout.
 - [ ] Use primeiro o smoke com `commit: false`; uma gravação real só deve ser validada quando houver item autorizado para apontamento.
+- [ ] Em um dia novo de 08:00, confirme que a prévia começa com `100%`, 08:00 e a TAG padrão.
+- [ ] Troque a primeira marcação para duração `03:00`; confirme a criação imediata do saldo `05:00`, também em duração, com a TAG padrão.
+- [ ] Troque o saldo para percentual e altere-o para `25%`; confirme três marcações (`03:00`, `02:00`, `37,5%`), com o último saldo também em percentual, `Distribuído 08:00` e `Falta 00:00`.
+- [ ] Escolha TAGs diferentes, envie e confirme no Extrato que as três marcações totalizam 08:00 no mesmo dia.
 
 ## Ahgora
 
@@ -29,17 +37,24 @@ Execute somente com autorização e participação do usuário. Não copie HTML,
 - [ ] Sem `participanteSelecionado`/`ID_EMPRESA` na página, um GET do Extrato recupera o contexto antes do DWR; falhas distinguem participante e empresa.
 - [ ] A barra Channel aguarda o Ahgora, fica indeterminada durante contexto/DWR e termina com quantidade real ou erro próprio.
 - [ ] Cada linha é lida na ordem; duplicidade não é somada e a última linha vence na comparação.
+- [ ] A leitura detalhada mostra projeto e atividade nas linhas existentes.
+- [ ] Cada marcação detalhada e removível mostra **Excluir** à direita; cancelar a confirmação não chama o Channel.
+- [ ] Confirmar **Excluir** remove somente o `id` escolhido, relê o mesmo dia e atualiza cores, totais e prévia; falta de permissão mantém o botão desabilitado com explicação.
 - [ ] Dia igual não vira candidato; divergência é mostrada e não corrigida; data exclusiva Channel não aparece na prévia.
 
 ## Channel — envio direto
 
 - [ ] Prévia começa vazia e dry-run não altera nenhum controle.
-- [ ] `Capturado`, `Novos para revisar (pré-seleção)` e `A preencher (selecionados)` mostram horas e contagens coerentes; selecionar/recusar atualiza imediatamente o último total sem alterar os dois primeiros.
+- [ ] Cada linha nova inicia com a TAG padrão e permite escolher outra TAG antes da seleção.
+- [ ] Captura e seus dois progressos estão na etapa 3; comparação/seleção na etapa 4; envio e confirmação na etapa 5.
+- [ ] `Capturado`, `Novos para revisar (pré-seleção)` e `A preencher (selecionados)` mostram horas e contagens coerentes; marcar/desmarcar o checkbox atualiza imediatamente o último total sem alterar os dois primeiros e não existe botão Recusar/Recusado.
 - [ ] Preflight resolve projeto, atividade e tarefa por DWR e obtém token Struts por GET, sem alterar controles.
 - [ ] O clique único em **Enviar selecionados** produz no máximo um POST por item selecionado e não pede confirmação intermediária.
 - [ ] Antes e depois de cada POST, o extrato é consultado; igual é idempotente e divergência interrompe a fila.
 - [ ] Resposta ausente/ambígua interrompe a fila para conferência, sem retry automático.
 - [ ] Cancelar durante a fila impede o próximo despacho; um POST já recebido pelo servidor não é revertido.
+- [ ] `Parar login`, `Parar captura` e `Parar envio` aparecem apenas durante seus respectivos progressos e desaparecem após interromper.
+- [ ] Parar captura descarta seu resultado tardio; parar envio bloqueia o próximo POST e exige nova comparação para reconciliar eventual POST já despachado.
 
 ## MV3, retomada e resultado
 
@@ -66,3 +81,5 @@ Execute somente com autorização e participação do usuário. Não copie HTML,
 | 2026-08-23 | Channel contexto     | fallback Extrato/DWR           | pass      | Contexto removido da página foi recuperado por GET antes da leitura DWR.     |
 | 2026-08-23 | Login assistido      | autofill/submit/destinos       | pass      | Autofill simulado; a extensão acionou ambos e abriu as páginas de trabalho.  |
 | 2026-08-23 | Progresso real       | Ahgora/Channel                 | pass      | Três transições intermediárias observadas no estado da extensão headless.    |
+| 2026-08-23 | Catálogo/TAGs        | projetos/atividades/cache      | pass      | 11 projetos e 12 atividades consultados; combinação padrão reconhecida.      |
+| 2026-08-23 | Leitura detalhada    | projeto/atividade por dia      | pass      | Dias 20–21/08 exibiram duração, projeto e atividade no Chrome headless.      |

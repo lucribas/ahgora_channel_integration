@@ -1,13 +1,40 @@
 import type {
   InjectedChannelFillInput,
   InjectedChannelFillResult,
+  InjectedChannelCatalogResult,
+  InjectedChannelDeleteInput,
+  InjectedChannelDeleteResult,
   InjectedChannelReadInput,
   InjectedChannelReadResult,
 } from './injected';
 import {
   runInjectedChannelApiRead,
   runInjectedChannelApiWrite,
+  runInjectedChannelCatalog,
+  runInjectedChannelApiDelete,
 } from './api-injected';
+
+export async function executeChannelCatalog(
+  tabId: number,
+): Promise<InjectedChannelCatalogResult> {
+  const [execution] = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: 'MAIN',
+    func: runInjectedChannelCatalog,
+    args: [{ timeoutMs: 30_000 }],
+  });
+  const result = execution?.result ?? {
+    ok: false as const,
+    code: 'missing-execution-result',
+  };
+  console.info('[AhgoraChannel][ChannelCatalogRunner]', {
+    status: result.ok ? 'ok' : 'failed',
+    tabId,
+    projectCount: result.ok ? result.projects.length : undefined,
+    code: result.ok ? undefined : result.code,
+  });
+  return result;
+}
 
 export async function executeChannelRead(
   tabId: number,
@@ -30,6 +57,29 @@ export async function executeChannelRead(
     code: result.ok ? undefined : result.code,
     rowCount: result.ok ? result.rows.length : undefined,
     invalidRowCount: result.ok ? result.errors.length : undefined,
+  });
+  return result;
+}
+
+export async function executeChannelDelete(
+  tabId: number,
+  input: InjectedChannelDeleteInput,
+): Promise<InjectedChannelDeleteResult> {
+  const [execution] = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: 'MAIN',
+    func: runInjectedChannelApiDelete,
+    args: [{ ...input, timeoutMs: input.timeoutMs ?? 30_000 }],
+  });
+  const result = execution?.result ?? {
+    ok: false as const,
+    code: 'missing-execution-result',
+  };
+  console.info('[AhgoraChannel][ChannelApiDeleteRunner]', {
+    status: result.ok ? 'ok' : 'failed',
+    code: result.ok ? undefined : result.code,
+    tabId,
+    hasExecution: execution !== undefined,
   });
   return result;
 }

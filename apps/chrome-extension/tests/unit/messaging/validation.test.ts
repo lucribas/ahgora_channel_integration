@@ -13,10 +13,54 @@ describe('message boundary validation', () => {
       isIncomingMessage({ type: 'START_OPERATION', operationId: 'op-1' }),
     ).toBe(true);
     expect(
+      isIncomingMessage({ type: 'CHECK_LOGIN_STATUS', operationId: 'op-1' }),
+    ).toBe(true);
+    expect(
       isIncomingMessage({
         type: 'OPEN_LOGIN_PAGES',
         operationId: 'op-1',
         autoSubmit: true,
+      }),
+    ).toBe(true);
+    expect(
+      isIncomingMessage({
+        type: 'APPLY_MARKING_TEMPLATE',
+        operationId: 'op-1',
+        itemId: '2026-08-20',
+        basis: 'percentage',
+        overflowStrategy: 'reject',
+        template: {
+          id: 'template-1',
+          name: 'Padrão',
+          sourceDurationMinutes: 480,
+          entries: [],
+          createdAt: '2026-08-24T00:00:00.000Z',
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isIncomingMessage({
+        type: 'SET_ALLOCATION_RAG',
+        operationId: 'op-1',
+        itemId: '2026-08-20',
+        allocationId: '2026-08-20::2',
+        catalogId: 'reunioes-rag',
+        ragItemId: 'reunioes-rag:029:lightning-talk',
+      }),
+    ).toBe(true);
+    expect(
+      isIncomingMessage({
+        type: 'DELETE_CHANNEL_MARKING',
+        operationId: 'op-1',
+        itemId: '2026-08-20',
+        markingId: '12345',
+      }),
+    ).toBe(true);
+    expect(
+      isIncomingMessage({
+        type: 'STOP_CURRENT_ACTION',
+        operationId: 'op-1',
+        action: 'capture',
       }),
     ).toBe(true);
     expect(
@@ -33,6 +77,16 @@ describe('message boundary validation', () => {
         dryRun: true,
       }),
     ).toBe(true);
+    expect(
+      isIncomingMessage({
+        type: 'UPDATE_ALLOCATION',
+        operationId: 'op-1',
+        itemId: '2026-08-20',
+        allocationId: '2026-08-20::2',
+        mode: 'duration',
+        value: '03:00',
+      }),
+    ).toBe(true);
   });
 
   it('rejects unknown, malformed, or stale messages', () => {
@@ -45,6 +99,41 @@ describe('message boundary validation', () => {
         type: 'OPEN_LOGIN_PAGES',
         operationId: 'op-1',
         autoSubmit: 'yes',
+      }),
+    ).toBe(false);
+    expect(
+      isIncomingMessage({
+        type: 'APPLY_MARKING_TEMPLATE',
+        operationId: 'op-1',
+        itemId: '2026-08-20',
+        basis: 'hours',
+        overflowStrategy: 'force',
+        template: { id: 'template-1', name: 'Padrão', entries: [] },
+      }),
+    ).toBe(false);
+    expect(
+      isIncomingMessage({
+        type: 'DELETE_CHANNEL_MARKING',
+        operationId: 'op-1',
+        itemId: '2026-08-20',
+        markingId: '',
+      }),
+    ).toBe(false);
+    expect(
+      isIncomingMessage({
+        type: 'STOP_CURRENT_ACTION',
+        operationId: 'op-1',
+        action: 'everything',
+      }),
+    ).toBe(false);
+    expect(
+      isIncomingMessage({
+        type: 'UPDATE_ALLOCATION',
+        operationId: 'op-1',
+        itemId: '2026-08-20',
+        allocationId: '2026-08-20::2',
+        mode: 'hours',
+        value: '03:00',
       }),
     ).toBe(false);
     expect(

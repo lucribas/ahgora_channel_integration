@@ -19,7 +19,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "verbatimModuleSyntax": true,
-    "types": ["chrome", "node", "vitest/globals"]
+    "types": ["chrome", "node", "vite/client", "vitest/globals"]
   },
   "include": [
     "src",

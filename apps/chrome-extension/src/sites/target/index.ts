@@ -1,5 +1,12 @@
-export { executeChannelFill, executeChannelRead } from './chrome-runner';
 export {
+  executeChannelCatalog,
+  executeChannelDelete,
+  executeChannelFill,
+  executeChannelRead,
+} from './chrome-runner';
+export {
+  runInjectedChannelCatalog,
+  runInjectedChannelApiDelete,
   runInjectedChannelApiRead,
   runInjectedChannelApiWrite,
 } from './api-injected';
@@ -12,6 +19,10 @@ export {
   type InjectedChannelReadInput,
   type InjectedChannelReadResult,
   type InjectedChannelReadRow,
+  type InjectedChannelDeleteInput,
+  type InjectedChannelDeleteResult,
+  type InjectedChannelCatalogProject,
+  type InjectedChannelCatalogResult,
 } from './injected';
 export {
   parseChannelExtract,

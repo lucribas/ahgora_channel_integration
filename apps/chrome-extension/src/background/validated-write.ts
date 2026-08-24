@@ -1,5 +1,5 @@
 import type { OperationData, RegisteredTab } from '../application/types';
-import type { ProjectAssignment } from '../domain';
+import type { ChannelAssignment } from '../domain';
 import type { InjectedChannelFillResult } from '../sites/target';
 
 export interface ValidatedWriteDependencies {
@@ -8,13 +8,13 @@ export interface ValidatedWriteDependencies {
   cancellationRequested(operationId: string): boolean;
   dispatchFill(
     tabId: number,
-    assignment: ProjectAssignment,
+    assignment: ChannelAssignment,
   ): Promise<InjectedChannelFillResult>;
 }
 
 export async function executeValidatedChannelFill(
   expected: OperationData,
-  assignment: ProjectAssignment,
+  assignment: ChannelAssignment,
   dependencies: ValidatedWriteDependencies,
 ): Promise<InjectedChannelFillResult> {
   const binding = expected.targetTab;

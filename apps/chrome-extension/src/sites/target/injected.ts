@@ -9,7 +9,46 @@ export interface InjectedChannelReadRow {
   readonly date: string;
   readonly duration: string;
   readonly durationMinutes: number;
+  readonly project?: string;
+  readonly activity?: string;
+  readonly markings?: readonly InjectedChannelMarking[];
 }
+
+export interface InjectedChannelMarking {
+  readonly id: string;
+  readonly date: string;
+  readonly duration: string;
+  readonly durationMinutes: number;
+  readonly project?: string;
+  readonly activity?: string;
+  readonly canDelete: boolean;
+}
+
+export interface InjectedChannelDeleteInput {
+  readonly id: string;
+  readonly date: string;
+  readonly timeoutMs?: number;
+}
+
+export type InjectedChannelDeleteResult =
+  | { readonly ok: true; readonly id: string; readonly date: string }
+  | { readonly ok: false; readonly code: string };
+
+export interface InjectedChannelCatalogProject {
+  readonly id: string;
+  readonly label: string;
+  readonly activities: readonly {
+    readonly id: string;
+    readonly label: string;
+  }[];
+}
+
+export type InjectedChannelCatalogResult =
+  | {
+      readonly ok: true;
+      readonly projects: readonly InjectedChannelCatalogProject[];
+    }
+  | { readonly ok: false; readonly code: string };
 
 export type InjectedChannelReadResult =
   | {
@@ -22,17 +61,32 @@ export type InjectedChannelReadResult =
     }
   | { readonly ok: false; readonly code: string };
 
-export interface InjectedChannelFillInput {
+interface InjectedChannelFillBase {
+  readonly date: string;
+  readonly duration: string;
+  readonly durationMinutes: number;
+  readonly comments?: string;
+  readonly expectedExistingMinutes?: number;
+  readonly timeoutMs?: number;
+}
+
+export interface InjectedChannelProjectFillInput extends InjectedChannelFillBase {
   readonly kind: 'PROJETOS';
   readonly project: string;
   readonly activityType: string;
   readonly activity: string;
   readonly task: string;
-  readonly date: string;
-  readonly duration: string;
-  readonly durationMinutes: number;
-  readonly timeoutMs?: number;
 }
+
+export interface InjectedChannelAdHocFillInput extends InjectedChannelFillBase {
+  readonly kind: 'AVULSO';
+  readonly client: string;
+  readonly operationNature: string;
+  readonly activityType: string;
+}
+
+export type InjectedChannelFillInput =
+  InjectedChannelProjectFillInput | InjectedChannelAdHocFillInput;
 
 export interface InjectedChannelFillResult {
   readonly date: string;
@@ -214,7 +268,7 @@ export async function runInjectedChannelRead(
 
 /** Autocontida, um item PROJETOS por chamada e sem qualquer caminho de envio. */
 export async function runInjectedChannelFill(
-  input: InjectedChannelFillInput,
+  input: InjectedChannelProjectFillInput,
   runtimeDocument: Document = document,
 ): Promise<InjectedChannelFillResult> {
   const selectors = {

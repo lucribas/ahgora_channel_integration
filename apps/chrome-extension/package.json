@@ -20,7 +20,8 @@
     "test": "npm run test:unit && npm run test:parity && npm run test:integration && npm run test:e2e",
     "build": "vite build && node scripts/verify-build.mjs",
     "e2e:install": "playwright install chromium",
-    "package": "npm run build && node scripts/package.mjs"
+    "package": "npm run build && node scripts/package.mjs",
+    "convert:rag": "node scripts/convert-rag.mjs"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "2.7.1",

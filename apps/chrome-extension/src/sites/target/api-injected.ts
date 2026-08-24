@@ -1,6 +1,9 @@
 import type {
   InjectedChannelFillInput,
   InjectedChannelFillResult,
+  InjectedChannelCatalogResult,
+  InjectedChannelDeleteInput,
+  InjectedChannelDeleteResult,
   InjectedChannelReadInput,
   InjectedChannelReadResult,
 } from './injected';
@@ -12,12 +15,210 @@ interface DwrApi {
 type ChannelRuntime = typeof globalThis & {
   readonly ApontamentoAjax?: DwrApi;
   readonly ProjetoAjax?: DwrApi;
+  readonly ClienteAjax?: DwrApi;
+  readonly TipoAtividadeAjax?: DwrApi;
   readonly ID_EMPRESA?: string | number;
+  readonly ID_AREA_USUARIO_LOGADO?: string | number;
+  readonly idAreaUsuario?: string | number;
+  readonly idUsuarioSelecionado?: string | number;
+  readonly checkBoxApontamento?: string;
+  readonly dwr?: {
+    readonly engine?: {
+      _execute(
+        path: string,
+        owner: string,
+        method: string,
+        args: ArrayLike<unknown>,
+      ): unknown;
+    };
+  };
 };
 
 interface ChannelApiRow {
   readonly dataFormatada?: unknown;
   readonly totalDuracao?: unknown;
+}
+
+interface ChannelDetailRow {
+  readonly id?: unknown;
+  readonly duracao?: unknown;
+  readonly duracaoDouble?: unknown;
+  readonly permissaoRemover?: unknown;
+  readonly projeto?: unknown;
+  readonly notificacao?: unknown;
+  readonly nomeApontamento?: unknown;
+  readonly nomeAtividadeTicket?: unknown;
+}
+
+/** Obtém projetos e, para cada projeto, as atividades permitidas ao usuário. */
+export async function runInjectedChannelCatalog(
+  input: { readonly timeoutMs?: number } = {},
+): Promise<InjectedChannelCatalogResult> {
+  const runtime = globalThis as ChannelRuntime;
+  const apontamento = runtime.ApontamentoAjax;
+  const projetos = runtime.ProjetoAjax;
+  const timeoutMs = input.timeoutMs ?? 30_000;
+  const failure = (code: string): InjectedChannelCatalogResult => {
+    console.warn('[AhgoraChannel][ChannelCatalog]', {
+      status: 'failed',
+      code,
+      origin: location.origin,
+    });
+    return { ok: false, code };
+  };
+  if (!apontamento || !projetos) return failure('channel-api-unavailable');
+  const call = (
+    owner: DwrApi,
+    method: string,
+    args: readonly unknown[],
+  ): Promise<unknown> =>
+    new Promise((resolve, reject) => {
+      const action = owner[method];
+      if (!action) {
+        reject(new Error(`${method}-not-found`));
+        return;
+      }
+      const timer = globalThis.setTimeout(
+        () => reject(new Error(`${method}-timeout`)),
+        timeoutMs,
+      );
+      action(...args, (value: unknown) => {
+        globalThis.clearTimeout(timer);
+        resolve(value);
+      });
+    });
+  const recordOf = (value: unknown): Record<string, unknown> | undefined =>
+    typeof value === 'object' && value !== null
+      ? (value as Record<string, unknown>)
+      : undefined;
+  const idOf = (record: Record<string, unknown>): string | undefined =>
+    typeof record.id === 'string' || typeof record.id === 'number'
+      ? String(record.id)
+      : undefined;
+  const labelOf = (record: Record<string, unknown>): string | undefined => {
+    const code =
+      typeof record.codigo === 'string' || typeof record.codigo === 'number'
+        ? String(record.codigo).trim()
+        : '';
+    const nameCandidates = [
+      record.nome,
+      record.descricao,
+      record.nomeAtividade,
+      record.nomeNotificacao,
+    ];
+    const name = nameCandidates.find(
+      (value): value is string =>
+        typeof value === 'string' && value.trim().length > 0,
+    );
+    const normalizedName = name?.trim() ?? '';
+    const label =
+      code &&
+      normalizedName.toLocaleLowerCase().startsWith(code.toLocaleLowerCase())
+        ? normalizedName
+        : `${code} ${normalizedName}`.trim();
+    return label || undefined;
+  };
+  try {
+    const formResponse = await fetch('/channel/apontamento.do?action=novo', {
+      credentials: 'include',
+      headers: { Accept: 'text/html' },
+    });
+    const formHtml = await formResponse.text();
+    const parsed = new DOMParser().parseFromString(formHtml, 'text/html');
+    if (parsed.querySelector('#loginForm')) return failure('login-required');
+    let participant =
+      parsed.querySelector<HTMLInputElement>('[name="participanteSelecionado"]')
+        ?.value ||
+      document.querySelector<HTMLInputElement>('#participanteSelecionado')
+        ?.value ||
+      String(runtime.idUsuarioSelecionado ?? '');
+    if (!participant) {
+      const extractResponse = await fetch(
+        '/channel/apontamento.do?action=listarDatas&retorno=painel',
+        { credentials: 'include', headers: { Accept: 'text/html' } },
+      );
+      const extract = new DOMParser().parseFromString(
+        await extractResponse.text(),
+        'text/html',
+      );
+      participant =
+        extract.querySelector<HTMLInputElement>('#participanteSelecionado')
+          ?.value ?? '';
+    }
+    if (!participant) return failure('channel-participant-unavailable');
+    const isStaff = Boolean(await call(apontamento, 'isStaff', [participant]));
+    const rawProjects = await call(
+      projetos,
+      isStaff
+        ? 'listarPorUsuarioObjetoFalso'
+        : 'listarPorUsuarioAreaApontamento',
+      isStaff ? [participant] : [-1, true, false],
+    );
+    if (!Array.isArray(rawProjects))
+      return failure('channel-project-contract-invalid');
+    const projectRows = rawProjects.flatMap((candidate) => {
+      const record = recordOf(candidate);
+      if (!record) return [];
+      const id = idOf(record);
+      const label = labelOf(record);
+      return id && label ? [{ id, label }] : [];
+    });
+    const output: Array<{
+      id: string;
+      label: string;
+      activities: Array<{ id: string; label: string }>;
+    }> = [];
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      while (cursor < projectRows.length) {
+        const index = cursor++;
+        const project = projectRows[index];
+        if (!project) continue;
+        const rawActivities = await call(
+          apontamento,
+          'getAtividadesByProjeto',
+          [project.id, participant, null],
+        );
+        const activities = Array.isArray(rawActivities)
+          ? rawActivities.flatMap((candidate) => {
+              const record = recordOf(candidate);
+              if (!record) return [];
+              const id = idOf(record);
+              const label = labelOf(record);
+              return id && label ? [{ id, label }] : [];
+            })
+          : [];
+        output[index] = {
+          ...project,
+          activities: activities.sort((left, right) =>
+            left.label.localeCompare(right.label, 'pt-BR'),
+          ),
+        };
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(4, Math.max(1, projectRows.length)) }, () =>
+        worker(),
+      ),
+    );
+    const result = output
+      .filter(Boolean)
+      .sort((left, right) => left.label.localeCompare(right.label, 'pt-BR'));
+    console.info('[AhgoraChannel][ChannelCatalog]', {
+      status: 'ok',
+      origin: location.origin,
+      projectCount: result.length,
+      activityCount: result.reduce(
+        (total, project) => total + project.activities.length,
+        0,
+      ),
+    });
+    return { ok: true, projects: result };
+  } catch (error: unknown) {
+    return failure(
+      error instanceof Error ? error.message : 'channel-catalog-failed',
+    );
+  }
 }
 
 interface ChannelApiResult {
@@ -138,7 +339,8 @@ export async function runInjectedChannelApiRead(
     ])) as ChannelApiResult;
     if (!Array.isArray(raw.lista))
       return failed('channel-api-contract-invalid');
-    const rows = raw.lista.flatMap((candidate, rowIndex) => {
+    const rawList = raw.lista;
+    let rows = rawList.flatMap((candidate, rowIndex) => {
       const row = candidate as ChannelApiRow;
       if (
         typeof row.dataFormatada !== 'string' ||
@@ -157,12 +359,113 @@ export async function runInjectedChannelApiRead(
         },
       ];
     });
-    const invalidRowCount = raw.lista.length - rows.length;
+    const invalidRowCount = rawList.length - rows.length;
+    let detailFailureCount = 0;
+    if (api.listarApontamentoPorDataIndividualmente) {
+      const filterType =
+        document.querySelector<HTMLInputElement>('#FILTRO_TIPO_APONTAMENTO')
+          ?.value ?? '0';
+      rows = await Promise.all(
+        rows.map(async (row) => {
+          try {
+            const details = await call(
+              api,
+              'listarApontamentoPorDataIndividualmente',
+              [
+                (rawList[row.rowIndex] as ChannelApiRow).dataFormatada,
+                participant,
+                filterType,
+                runtime.checkBoxApontamento ?? '',
+              ],
+            );
+            if (!Array.isArray(details)) return row;
+            const detailRows = details as ChannelDetailRow[];
+            const markings = detailRows.flatMap((detail) => {
+              if (
+                typeof detail.id !== 'string' &&
+                typeof detail.id !== 'number'
+              )
+                return [];
+              const rawDuration =
+                typeof detail.duracao === 'string' ? detail.duracao.trim() : '';
+              const durationMatch = /^(\d+):([0-5]\d)$/.exec(rawDuration);
+              const durationMinutes = durationMatch
+                ? Number(durationMatch[1]) * 60 + Number(durationMatch[2])
+                : typeof detail.duracaoDouble === 'number' &&
+                    Number.isFinite(detail.duracaoDouble)
+                  ? Math.round(detail.duracaoDouble * 60)
+                  : undefined;
+              if (durationMinutes === undefined || durationMinutes < 0)
+                return [];
+              const permission = detail.permissaoRemover;
+              const canDelete = !(
+                permission === false ||
+                permission === 0 ||
+                permission === '0' ||
+                (typeof permission === 'string' &&
+                  permission.toLocaleLowerCase() === 'false')
+              );
+              return [
+                {
+                  id: String(detail.id),
+                  date: row.date,
+                  duration: toDuration(durationMinutes),
+                  durationMinutes,
+                  ...(typeof detail.nomeApontamento === 'string' &&
+                  detail.nomeApontamento.trim()
+                    ? { project: detail.nomeApontamento.trim() }
+                    : {}),
+                  ...(typeof detail.nomeAtividadeTicket === 'string' &&
+                  detail.nomeAtividadeTicket.trim()
+                    ? { activity: detail.nomeAtividadeTicket.trim() }
+                    : {}),
+                  canDelete,
+                },
+              ];
+            });
+            const projects = [
+              ...new Set(
+                detailRows.flatMap((detail) =>
+                  typeof detail.nomeApontamento === 'string' &&
+                  detail.nomeApontamento.trim()
+                    ? [detail.nomeApontamento.trim()]
+                    : [],
+                ),
+              ),
+            ];
+            const activities = [
+              ...new Set(
+                detailRows.flatMap((detail) =>
+                  typeof detail.nomeAtividadeTicket === 'string' &&
+                  detail.nomeAtividadeTicket.trim()
+                    ? [detail.nomeAtividadeTicket.trim()]
+                    : [],
+                ),
+              ),
+            ];
+            return {
+              ...row,
+              ...(markings.length === 0 ? {} : { markings }),
+              ...(projects.length === 0
+                ? {}
+                : { project: projects.join(' + ') }),
+              ...(activities.length === 0
+                ? {}
+                : { activity: activities.join(' + ') }),
+            };
+          } catch {
+            detailFailureCount++;
+            return row;
+          }
+        }),
+      );
+    }
     console.info('[AhgoraChannel][ChannelApiRead]', {
       status: 'ok',
       origin: location.origin,
       rowCount: rows.length,
       invalidRowCount,
+      detailFailureCount,
     });
     return {
       ok: true,
@@ -174,6 +477,137 @@ export async function runInjectedChannelApiRead(
     };
   } catch (error: unknown) {
     return failed(error instanceof Error ? error.message : 'api-read-failed');
+  }
+}
+
+/** Exclui somente o apontamento identificado e confirma que ele saiu do dia esperado. */
+export async function runInjectedChannelApiDelete(
+  input: InjectedChannelDeleteInput,
+): Promise<InjectedChannelDeleteResult> {
+  const runtime = globalThis as ChannelRuntime;
+  const api = runtime.ApontamentoAjax;
+  const timeoutMs = input.timeoutMs ?? 30_000;
+  const failed = (code: string): InjectedChannelDeleteResult => {
+    console.warn('[AhgoraChannel][ChannelApiDelete]', {
+      status: 'failed',
+      code,
+      origin: location.origin,
+      date: input.date,
+    });
+    return { ok: false, code };
+  };
+  if (!api?.listarApontamentoPorDataIndividualmente || !api.remover)
+    return failed('channel-delete-api-unavailable');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !input.id.trim())
+    return failed('invalid-delete-target');
+  const call = (
+    owner: DwrApi,
+    method: string,
+    args: readonly unknown[],
+  ): Promise<unknown> =>
+    new Promise((resolve, reject) => {
+      const action = owner[method];
+      if (!action) {
+        reject(new Error(`${method}-not-found`));
+        return;
+      }
+      const timer = globalThis.setTimeout(
+        () => reject(new Error(`${method}-timeout`)),
+        timeoutMs,
+      );
+      action(...args, (value: unknown) => {
+        globalThis.clearTimeout(timer);
+        resolve(value);
+      });
+    });
+  const brazilianDate = (() => {
+    const [year, month, day] = input.date.split('-');
+    return year && month && day ? `${day}/${month}/${year}` : '';
+  })();
+  try {
+    let participant =
+      document.querySelector<HTMLInputElement>('#participanteSelecionado')
+        ?.value ?? '';
+    if (!participant) {
+      const response = await fetch(
+        '/channel/apontamento.do?action=listarDatas&retorno=painel',
+        { credentials: 'include', headers: { Accept: 'text/html' } },
+      );
+      const context = new DOMParser().parseFromString(
+        await response.text(),
+        'text/html',
+      );
+      if (context.querySelector('#loginForm')) return failed('login-required');
+      participant =
+        context.querySelector<HTMLInputElement>('#participanteSelecionado')
+          ?.value ?? '';
+    }
+    if (!participant) return failed('channel-participant-unavailable');
+    const filterType =
+      document.querySelector<HTMLInputElement>('#FILTRO_TIPO_APONTAMENTO')
+        ?.value ?? '0';
+    const detailArgs = [
+      brazilianDate,
+      participant,
+      filterType,
+      runtime.checkBoxApontamento ?? '',
+    ] as const;
+    const before = await call(
+      api,
+      'listarApontamentoPorDataIndividualmente',
+      detailArgs,
+    );
+    if (!Array.isArray(before))
+      return failed('channel-detail-contract-invalid');
+    const target = before.find((candidate) => {
+      if (typeof candidate !== 'object' || candidate === null) return false;
+      const id = (candidate as { id?: unknown }).id;
+      return (
+        (typeof id === 'string' || typeof id === 'number') &&
+        String(id) === input.id
+      );
+    }) as ChannelDetailRow | undefined;
+    if (!target) return failed('marking-not-found');
+    const permission = target.permissaoRemover;
+    if (
+      permission === false ||
+      permission === 0 ||
+      permission === '0' ||
+      (typeof permission === 'string' &&
+        permission.toLocaleLowerCase() === 'false')
+    )
+      return failed('marking-delete-not-permitted');
+    const numericId = Number(input.id);
+    await call(api, 'remover', [
+      Number.isSafeInteger(numericId) && String(numericId) === input.id
+        ? numericId
+        : input.id,
+    ]);
+    const after = await call(
+      api,
+      'listarApontamentoPorDataIndividualmente',
+      detailArgs,
+    );
+    if (!Array.isArray(after)) return failed('delete-confirmation-invalid');
+    const stillPresent = after.some((candidate) => {
+      if (typeof candidate !== 'object' || candidate === null) return false;
+      const id = (candidate as { id?: unknown }).id;
+      return (
+        (typeof id === 'string' || typeof id === 'number') &&
+        String(id) === input.id
+      );
+    });
+    if (stillPresent) return failed('delete-not-confirmed');
+    console.info('[AhgoraChannel][ChannelApiDelete]', {
+      status: 'ok',
+      origin: location.origin,
+      date: input.date,
+    });
+    return { ok: true, id: input.id, date: input.date };
+  } catch (error: unknown) {
+    return failed(
+      error instanceof Error ? error.message : 'channel-delete-failed',
+    );
   }
 }
 
@@ -221,9 +655,11 @@ export async function runInjectedChannelApiWrite(
           : '';
       const name = typeof record.nome === 'string' ? record.nome : '';
       const combined = `${code} ${name}`.trim();
+      const requestedCode = /^\s*([^\s-]+)/.exec(prefix)?.[1];
       return (
         values.some((value) => value.trim().startsWith(prefix)) ||
-        combined.startsWith(prefix)
+        combined.startsWith(prefix) ||
+        (requestedCode !== undefined && code === requestedCode)
       );
     });
   };
@@ -242,6 +678,16 @@ export async function runInjectedChannelApiWrite(
       option.text.trim().startsWith(prefix),
     )?.value;
   };
+  const normalize = (value: unknown): string =>
+    (typeof value === 'string' || typeof value === 'number'
+      ? String(value)
+      : ''
+    )
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLocaleLowerCase('pt-BR');
   const brazilianDate = (value: string): string => {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
     if (!match) throw new Error('invalid-date');
@@ -261,7 +707,7 @@ export async function runInjectedChannelApiWrite(
     });
     return { ...base, status, code };
   };
-  if (!apontamento || !projetos)
+  if (!apontamento || (input.kind === 'PROJETOS' && !projetos))
     return failure('failed', 'channel-api-unavailable');
 
   try {
@@ -341,63 +787,168 @@ export async function runInjectedChannelApiWrite(
         ? Math.round(row.totalDuracao * 60)
         : undefined;
     };
-    const existingMinutes = await readExistingMinutes();
-    if (existingMinutes !== undefined) {
-      return existingMinutes === input.durationMinutes
-        ? {
-            ...base,
-            status: 'already-correct',
-            resultingMinutes: existingMinutes,
-          }
-        : failure('validation-error', 'existing-duration-divergent');
-    }
-    const isStaff = Boolean(await call(apontamento, 'isStaff', [participant]));
-    const projectItems = (await call(
-      projetos,
-      isStaff
-        ? 'listarPorUsuarioObjetoFalso'
-        : 'listarPorUsuarioAreaApontamento',
-      isStaff ? [participant] : [-1, true, false],
-    )) as unknown[];
-    const project = find(projectItems, input.project);
-    if (!project) return failure('not-found', 'project-prefix-not-found');
-    const projectId = idOf(project);
-    const activities = (await call(apontamento, 'getAtividadesByProjeto', [
-      projectId,
-      participant,
-      null,
-    ])) as unknown[];
-    const activity = find(activities, input.activity);
-    if (!activity) return failure('not-found', 'activity-prefix-not-found');
-    const activityId = idOf(activity);
-    const tasks = (await call(apontamento, 'getTarefasByAtividade', [
-      activityId,
-    ])) as unknown[];
-    const task = find(tasks, input.task);
-    const activityType = selectValue(
-      form,
-      '[id="apontamento.idTipoAtividadeProjeto"]',
-      input.activityType,
-    );
-    const taskId = task
-      ? idOf(task)
-      : selectValue(form, '[id="apontamento.idTarefa"]', input.task);
-    if (activityType === undefined)
-      return failure('not-found', 'activity-type-prefix-not-found');
-    if (taskId === undefined)
-      return failure('not-found', 'task-prefix-not-found');
-
+    const existingMinutes = (await readExistingMinutes()) ?? 0;
+    const expectedExistingMinutes = input.expectedExistingMinutes ?? 0;
+    const expectedResultingMinutes =
+      expectedExistingMinutes + input.durationMinutes;
+    if (existingMinutes === expectedResultingMinutes)
+      return {
+        ...base,
+        status: 'already-correct',
+        resultingMinutes: existingMinutes,
+      };
+    if (existingMinutes !== expectedExistingMinutes)
+      return failure('validation-error', 'existing-duration-divergent');
     const body = new URLSearchParams();
     for (const [name, value] of new FormData(form))
       if (typeof value === 'string') body.append(name, value);
-    const projectType =
-      form.querySelector<HTMLInputElement>('#tpApontamentoProjeto')?.value ??
-      '0';
-    body.set('tipoApontamento', projectType);
-    body.set('apontamento.projetosSelecionado', projectId);
-    body.set('apontamento.idTipoAtividadeProjeto', activityType);
-    body.set('apontamento.notificacaoSelecionada', activityId);
-    body.set('apontamento.idTarefa', taskId);
+    if (input.kind === 'AVULSO') {
+      const engine = runtime.dwr?.engine;
+      const clients =
+        runtime.ClienteAjax ??
+        (engine
+          ? {
+              campoApropriacaoAutocomplete: (...args: unknown[]): unknown => {
+                return engine._execute(
+                  '/channel/dwr',
+                  'ClienteAjax',
+                  'campoApropriacaoAutocomplete',
+                  args,
+                );
+              },
+            }
+          : undefined);
+      const activityTypes =
+        runtime.TipoAtividadeAjax ??
+        (engine
+          ? {
+              getTipoAtividadePorArea: (...args: unknown[]): unknown => {
+                return engine._execute(
+                  '/channel/dwr',
+                  'TipoAtividadeAjax',
+                  'getTipoAtividadePorArea',
+                  args,
+                );
+              },
+            }
+          : undefined);
+      if (!clients) return failure('failed', 'client-api-unavailable');
+      const clientItems = (await call(clients, 'campoApropriacaoAutocomplete', [
+        input.client,
+      ])) as unknown[];
+      const client = Array.isArray(clientItems)
+        ? (clientItems.find(
+            (candidate): candidate is Record<string, unknown> => {
+              if (typeof candidate !== 'object' || candidate === null)
+                return false;
+              const record = candidate as Record<string, unknown>;
+              return Object.values(record).some(
+                (value) => normalize(value) === normalize(input.client),
+              );
+            },
+          ) ?? find(clientItems, input.client))
+        : undefined;
+      if (!client) return failure('not-found', 'client-not-found');
+      const natureSelect = form.querySelector<HTMLSelectElement>(
+        '[id="apontamento.tipoOperacaoSelecionado"]',
+      );
+      const requestedNature = normalize(input.operationNature);
+      const nature = [...(natureSelect?.options ?? [])].find((option) => {
+        const label = normalize(option.text);
+        const requestedCode = /^\d+/.exec(requestedNature)?.[0];
+        const labelCode = /^\d+/.exec(label)?.[0];
+        return (
+          label.startsWith(requestedNature) ||
+          requestedNature.startsWith(label) ||
+          (requestedCode !== undefined && requestedCode === labelCode)
+        );
+      });
+      if (!nature)
+        return failure('not-found', 'operation-nature-prefix-not-found');
+      let activityTypeId = '-1';
+      if (normalize(input.activityType) !== 'nenhum') {
+        if (!activityTypes)
+          return failure('failed', 'ad-hoc-activity-api-unavailable');
+        const scripts = [...parsed.scripts]
+          .map((script) => script.textContent)
+          .join('\n');
+        const area = String(
+          runtime.idAreaUsuario ??
+            runtime.ID_AREA_USUARIO_LOGADO ??
+            /(?:var\s+)?(?:idAreaUsuario|ID_AREA_USUARIO_LOGADO)\s*=\s*["']?([A-Za-z0-9_-]+)/.exec(
+              scripts,
+            )?.[1] ??
+            '',
+        );
+        if (!area) return failure('failed', 'channel-area-unavailable');
+        const typeItems = (await call(
+          activityTypes,
+          'getTipoAtividadePorArea',
+          [area, []],
+        )) as unknown[];
+        const activityType = find(typeItems, input.activityType);
+        if (!activityType)
+          return failure('not-found', 'ad-hoc-activity-type-prefix-not-found');
+        activityTypeId = idOf(activityType);
+      }
+      body.set(
+        'tipoApontamento',
+        form.querySelector<HTMLInputElement>('#tpApontamentoAvulso')?.value ??
+          '2',
+      );
+      body.set('apontamento.clienteSelecionadoAvulso', idOf(client));
+      body.set('apontamento.tipoOperacaoSelecionado', nature.value);
+      body.set('apontamento.idTipoAtividadeAvulso', activityTypeId);
+    } else {
+      if (!projetos) return failure('failed', 'project-api-unavailable');
+      const isStaff = Boolean(
+        await call(apontamento, 'isStaff', [participant]),
+      );
+      const projectItems = (await call(
+        projetos,
+        isStaff
+          ? 'listarPorUsuarioObjetoFalso'
+          : 'listarPorUsuarioAreaApontamento',
+        isStaff ? [participant] : [-1, true, false],
+      )) as unknown[];
+      const project = find(projectItems, input.project);
+      if (!project) return failure('not-found', 'project-prefix-not-found');
+      const projectId = idOf(project);
+      const activities = (await call(apontamento, 'getAtividadesByProjeto', [
+        projectId,
+        participant,
+        null,
+      ])) as unknown[];
+      const activity = find(activities, input.activity);
+      if (!activity) return failure('not-found', 'activity-prefix-not-found');
+      const activityId = idOf(activity);
+      const tasks = (await call(apontamento, 'getTarefasByAtividade', [
+        activityId,
+      ])) as unknown[];
+      const task = find(tasks, input.task);
+      const activityType = selectValue(
+        form,
+        '[id="apontamento.idTipoAtividadeProjeto"]',
+        input.activityType,
+      );
+      const taskId = task
+        ? idOf(task)
+        : selectValue(form, '[id="apontamento.idTarefa"]', input.task);
+      if (activityType === undefined)
+        return failure('not-found', 'activity-type-prefix-not-found');
+      if (taskId === undefined)
+        return failure('not-found', 'task-prefix-not-found');
+      body.set(
+        'tipoApontamento',
+        form.querySelector<HTMLInputElement>('#tpApontamentoProjeto')?.value ??
+          '0',
+      );
+      body.set('apontamento.projetosSelecionado', projectId);
+      body.set('apontamento.idTipoAtividadeProjeto', activityType);
+      body.set('apontamento.notificacaoSelecionada', activityId);
+      body.set('apontamento.idTarefa', taskId);
+    }
+    body.set('apontamento.comentario', input.comments ?? '');
     body.set('data', brazilianDate(input.date));
     body.set('apontamento.duracao', input.duration);
     body.set('apontamento.horaInicio', '');
@@ -411,7 +962,11 @@ export async function runInjectedChannelApiWrite(
         origin: location.origin,
         fieldCount: [...body.keys()].length,
       });
-      return { ...base, status: 'filled', resultingMinutes: 0 };
+      return {
+        ...base,
+        status: 'filled',
+        resultingMinutes: expectedExistingMinutes,
+      };
     }
     const saved = await fetch(form.getAttribute('action') ?? form.action, {
       method: 'POST',
@@ -426,12 +981,12 @@ export async function runInjectedChannelApiWrite(
       return failure('failed', `write-http-${String(saved.status)}`);
     let confirmedMinutes: number | undefined;
     const deadline = Date.now() + timeoutMs;
-    while (Date.now() <= deadline && confirmedMinutes === undefined) {
+    while (Date.now() <= deadline) {
       confirmedMinutes = await readExistingMinutes();
-      if (confirmedMinutes === undefined)
-        await new Promise((resolve) => globalThis.setTimeout(resolve, 250));
+      if (confirmedMinutes === expectedResultingMinutes) break;
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 250));
     }
-    if (confirmedMinutes !== input.durationMinutes)
+    if (confirmedMinutes !== expectedResultingMinutes)
       return failure(
         confirmedMinutes === undefined ? 'failed' : 'validation-error',
         confirmedMinutes === undefined

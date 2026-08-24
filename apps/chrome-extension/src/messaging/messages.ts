@@ -3,12 +3,19 @@ import type {
   PublicOperationState,
   TabRole,
 } from '../application/types';
+import type { ChannelCatalog, MarkingTemplate } from '../application/settings';
+import type {
+  TemplateApplicationBasis,
+  TemplateOverflowStrategy,
+} from '../application/marking-templates';
 
 export type { TabRole } from '../application/types';
 
 export type IncomingMessage =
   | { readonly type: 'GET_STATE' }
   | { readonly type: 'START_OPERATION'; readonly operationId: string }
+  | { readonly type: 'FETCH_CHANNEL_CATALOG'; readonly operationId: string }
+  | { readonly type: 'CHECK_LOGIN_STATUS'; readonly operationId: string }
   | {
       readonly type: 'OPEN_LOGIN_PAGES';
       readonly operationId: string;
@@ -41,10 +48,64 @@ export type IncomingMessage =
       readonly itemId: string;
       readonly decision: 'selected' | 'refused';
     }
+  | {
+      readonly type: 'SET_ITEM_TAG';
+      readonly operationId: string;
+      readonly itemId: string;
+      readonly tagId: string;
+    }
+  | {
+      readonly type: 'UPDATE_ALLOCATION';
+      readonly operationId: string;
+      readonly itemId: string;
+      readonly allocationId: string;
+      readonly mode: 'percentage' | 'duration';
+      readonly value: string;
+    }
+  | {
+      readonly type: 'SET_ALLOCATION_TAG';
+      readonly operationId: string;
+      readonly itemId: string;
+      readonly allocationId: string;
+      readonly tagId: string;
+    }
+  | {
+      readonly type: 'SET_ALLOCATION_RAG';
+      readonly operationId: string;
+      readonly itemId: string;
+      readonly allocationId: string;
+      readonly catalogId: string;
+      readonly ragItemId: string;
+    }
+  | {
+      readonly type: 'REMOVE_ALLOCATION';
+      readonly operationId: string;
+      readonly itemId: string;
+      readonly allocationId: string;
+    }
+  | {
+      readonly type: 'APPLY_MARKING_TEMPLATE';
+      readonly operationId: string;
+      readonly itemId: string;
+      readonly template: MarkingTemplate;
+      readonly basis: TemplateApplicationBasis;
+      readonly overflowStrategy: TemplateOverflowStrategy;
+    }
+  | {
+      readonly type: 'DELETE_CHANNEL_MARKING';
+      readonly operationId: string;
+      readonly itemId: string;
+      readonly markingId: string;
+    }
   | { readonly type: 'SELECT_REMAINING'; readonly operationId: string }
   | { readonly type: 'RUN_DRY_RUN'; readonly operationId: string }
   | { readonly type: 'APPLY_SELECTED'; readonly operationId: string }
   | { readonly type: 'ADVANCE_QUEUE'; readonly operationId: string }
+  | {
+      readonly type: 'STOP_CURRENT_ACTION';
+      readonly operationId: string;
+      readonly action: 'login' | 'capture' | 'write';
+    }
   | { readonly type: 'CANCEL_OPERATION'; readonly operationId: string };
 
 export type OutgoingMessage =
@@ -65,5 +126,9 @@ export type OutgoingMessage =
     };
 
 export type UiResponse =
-  | { readonly ok: true; readonly state: PublicOperationState }
+  | {
+      readonly ok: true;
+      readonly state: PublicOperationState;
+      readonly catalog?: ChannelCatalog;
+    }
   | { readonly ok: false; readonly code: string; readonly message?: string };

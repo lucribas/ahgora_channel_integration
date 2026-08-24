@@ -13,7 +13,9 @@ import {
   runInjectedChannelFill,
   runInjectedChannelRead,
   runInjectedChannelApiRead,
+  runInjectedChannelApiDelete,
   runInjectedChannelApiWrite,
+  runInjectedChannelCatalog,
   waitForCondition,
 } from '../../src/sites/target';
 
@@ -72,8 +74,23 @@ describe('API direta do Channel', () => {
         ],
       }),
     );
+    const listarApontamentoPorDataIndividualmente = vi.fn(
+      (...args: unknown[]) =>
+        (args.at(-1) as (value: unknown) => void)([
+          {
+            id: 42,
+            duracao: '08:51',
+            permissaoRemover: true,
+            nomeApontamento: 'PROJETO_SINTETICO',
+            nomeAtividadeTicket: 'ATIVIDADE_SINTETICA',
+          },
+        ]),
+    );
     vi.stubGlobal('ID_EMPRESA', 'synthetic-company');
-    vi.stubGlobal('ApontamentoAjax', { listarApontamentoPorData });
+    vi.stubGlobal('ApontamentoAjax', {
+      listarApontamentoPorData,
+      listarApontamentoPorDataIndividualmente,
+    });
 
     const result = await runInjectedChannelApiRead({
       startDate: '18/08/2026',
@@ -89,11 +106,150 @@ describe('API direta do Channel', () => {
           date: '2026-08-18',
           duration: '08:51',
           durationMinutes: 531,
+          project: 'PROJETO_SINTETICO',
+          activity: 'ATIVIDADE_SINTETICA',
+          markings: [
+            {
+              id: '42',
+              date: '2026-08-18',
+              duration: '08:51',
+              durationMinutes: 531,
+              project: 'PROJETO_SINTETICO',
+              activity: 'ATIVIDADE_SINTETICA',
+              canDelete: true,
+            },
+          ],
         },
       ],
       errors: [],
     });
     expect(listarApontamentoPorData).toHaveBeenCalledTimes(1);
+    expect(listarApontamentoPorDataIndividualmente).toHaveBeenCalledWith(
+      '18/08/2026',
+      'synthetic-user',
+      '0',
+      '',
+      expect.any(Function),
+    );
+  });
+
+  it('exclui pelo identificador exato e confirma a remoção no mesmo dia', async () => {
+    document.body.innerHTML = `
+      <input id="participanteSelecionado" value="synthetic-user">
+      <input id="FILTRO_TIPO_APONTAMENTO" value="0">
+    `;
+    let deleted = false;
+    const listarApontamentoPorDataIndividualmente = vi.fn(
+      (...args: unknown[]) =>
+        (args.at(-1) as (value: unknown) => void)(
+          deleted
+            ? []
+            : [
+                {
+                  id: 42,
+                  duracao: '08:51',
+                  permissaoRemover: true,
+                },
+              ],
+        ),
+    );
+    const remover = vi.fn((...args: unknown[]) => {
+      deleted = true;
+      (args.at(-1) as (value: unknown) => void)({
+        mensagem: 'Removido',
+        tipoMensagem: 'success',
+      });
+    });
+    vi.stubGlobal('ApontamentoAjax', {
+      listarApontamentoPorDataIndividualmente,
+      remover,
+    });
+
+    await expect(
+      runInjectedChannelApiDelete({
+        id: '42',
+        date: '2026-08-18',
+        timeoutMs: 100,
+      }),
+    ).resolves.toEqual({ ok: true, id: '42', date: '2026-08-18' });
+    expect(remover).toHaveBeenCalledWith(42, expect.any(Function));
+    expect(listarApontamentoPorDataIndividualmente).toHaveBeenCalledTimes(2);
+  });
+
+  it('não exclui uma marcação sem permissão retornada pelo Channel', async () => {
+    document.body.innerHTML = `
+      <input id="participanteSelecionado" value="synthetic-user">
+    `;
+    const remover = vi.fn();
+    vi.stubGlobal('ApontamentoAjax', {
+      listarApontamentoPorDataIndividualmente: (...args: unknown[]) =>
+        (args.at(-1) as (value: unknown) => void)([
+          { id: 42, duracao: '08:51', permissaoRemover: false },
+        ]),
+      remover,
+    });
+
+    await expect(
+      runInjectedChannelApiDelete({
+        id: '42',
+        date: '2026-08-18',
+        timeoutMs: 100,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      code: 'marking-delete-not-permitted',
+    });
+    expect(remover).not.toHaveBeenCalled();
+  });
+
+  it('obtém projetos e atividades permitidas para o cache local', async () => {
+    const callback =
+      (value: unknown) =>
+      (...args: unknown[]): void =>
+        (args.at(-1) as (result: unknown) => void)(value);
+    vi.stubGlobal('ApontamentoAjax', {
+      isStaff: callback(false),
+      getAtividadesByProjeto: vi.fn((projectId: string, ...args: unknown[]) =>
+        (args.at(-1) as (result: unknown) => void)([
+          { id: Number(projectId) * 10, codigo: '1.3', nome: 'ATIVIDADE' },
+        ]),
+      ),
+    });
+    vi.stubGlobal('ProjetoAjax', {
+      listarPorUsuarioAreaApontamento: callback([
+        { id: 11, codigo: 'P11', nome: 'PROJETO ONZE' },
+        { id: 12, codigo: 'P12', nome: 'PROJETO DOZE' },
+      ]),
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            '<form name="apontamentoForm"><input name="participanteSelecionado" value="synthetic-user"></form>',
+            { status: 200 },
+          ),
+        ),
+      ),
+    );
+
+    await expect(
+      runInjectedChannelCatalog({ timeoutMs: 100 }),
+    ).resolves.toEqual({
+      ok: true,
+      projects: [
+        {
+          id: '11',
+          label: 'P11 PROJETO ONZE',
+          activities: [{ id: '110', label: '1.3 ATIVIDADE' }],
+        },
+        {
+          id: '12',
+          label: 'P12 PROJETO DOZE',
+          activities: [{ id: '120', label: '1.3 ATIVIDADE' }],
+        },
+      ],
+    });
   });
 
   it('recupera participante e empresa pelo GET autenticado do Extrato antes do DWR', async () => {
@@ -136,7 +292,7 @@ describe('API direta do Channel', () => {
     });
   });
 
-  it('prepara o POST com tokens e IDs retornados pelas APIs sem gravar no smoke', async () => {
+  it('aceita uma nova marcação quando o total existente coincide com o acumulado esperado', async () => {
     const html = `<!doctype html><form name="apontamentoForm" action="/channel/apontamento.do" method="post">
       <input type="hidden" name="org.apache.struts.taglib.html.TOKEN" value="synthetic-token">
       <input type="hidden" name="participanteSelecionado" value="synthetic-user">
@@ -153,7 +309,9 @@ describe('API direta do Channel', () => {
         (args.at(-1) as (result: unknown) => void)(value);
     vi.stubGlobal('ID_EMPRESA', 'synthetic-company');
     vi.stubGlobal('ApontamentoAjax', {
-      listarApontamentoPorData: callback({ lista: [] }),
+      listarApontamentoPorData: callback({
+        lista: [{ dataFormatada: '18/08/2026', totalDuracao: 3 }],
+      }),
       isStaff: callback(false),
       getAtividadesByProjeto: callback([
         { id: 22, nome: 'ATIVIDADE_SINTETICA' },
@@ -184,13 +342,14 @@ describe('API direta do Channel', () => {
       activity: 'ATIVIDADE_SINTETICA',
       task: 'Nenhum',
       date: '2026-08-18',
-      duration: '07:30',
-      durationMinutes: 450,
+      duration: '02:00',
+      durationMinutes: 120,
+      expectedExistingMinutes: 180,
       timeoutMs: 100,
       commit: false,
     });
 
-    expect(result).toMatchObject({ status: 'filled', resultingMinutes: 0 });
+    expect(result).toMatchObject({ status: 'filled', resultingMinutes: 180 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       credentials: 'include',
@@ -276,6 +435,79 @@ describe('API direta do Channel', () => {
     ).toBe('22');
     expect((body as URLSearchParams).get('data')).toBe('18/08/2026');
     expect((body as URLSearchParams).get('apontamento.duracao')).toBe('07:30');
+  });
+
+  it('prepara AVULSO resolvendo cliente, natureza, tipo e comentário por contrato', async () => {
+    const html = `<!doctype html><form name="apontamentoForm" action="/channel/apontamento.do" method="post">
+      <input type="hidden" name="participanteSelecionado" value="synthetic-user">
+      <input type="hidden" name="action"><input type="hidden" name="key">
+      <input id="tpApontamentoAvulso" type="radio" name="tipoApontamento" value="2">
+      <input name="apontamento.clienteSelecionadoAvulso" value="-1">
+      <select id="apontamento.tipoOperacaoSelecionado" name="apontamento.tipoOperacaoSelecionado">
+        <option value="0">Nenhum</option><option value="13">13. Formação/Capacitação</option>
+      </select>
+      <select id="apontamento.idTipoAtividadeAvulso" name="apontamento.idTipoAtividadeAvulso"><option value="-1">Nenhum</option></select>
+      <textarea name="apontamento.comentario"></textarea>
+      <input name="data"><input name="apontamento.duracao">
+    </form><script>var idAreaUsuario = 53;</script>`;
+    const callback =
+      (value: unknown) =>
+      (...args: unknown[]): void =>
+        (args.at(-1) as (result: unknown) => void)(value);
+    vi.stubGlobal('ID_EMPRESA', 'synthetic-company');
+    vi.stubGlobal('ID_AREA_USUARIO_LOGADO', 53);
+    let saved = false;
+    vi.stubGlobal('ApontamentoAjax', {
+      listarApontamentoPorData: (...args: unknown[]) =>
+        (args.at(-1) as (result: unknown) => void)({
+          lista: saved
+            ? [{ dataFormatada: '21/08/2026', totalDuracao: 0.5 }]
+            : [],
+        }),
+    });
+    vi.stubGlobal('ClienteAjax', {
+      campoApropriacaoAutocomplete: callback([
+        { id: 1, nome: 'CERTI' },
+        { id: 2, nome: 'CERTI AMAZONAS' },
+      ]),
+    });
+    vi.stubGlobal('TipoAtividadeAjax', {
+      getTipoAtividadePorArea: callback([
+        { id: 695, codigo: '99601', nome: 'Lightning Talk' },
+      ]),
+    });
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') saved = true;
+      return Promise.resolve(
+        new Response(init?.method === 'POST' ? 'saved' : html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runInjectedChannelApiWrite({
+      kind: 'AVULSO',
+      client: 'CERTI',
+      operationNature: '13. Formação/Capacitação',
+      activityType: '99601 - Lightning Talk',
+      comments: 'Lightning Talk',
+      date: '2026-08-21',
+      duration: '00:30',
+      durationMinutes: 30,
+      timeoutMs: 100,
+    });
+
+    expect(result).toMatchObject({ status: 'filled', resultingMinutes: 30 });
+    expect(vi.mocked(fetchMock)).toHaveBeenCalledTimes(2);
+    const body = vi.mocked(fetchMock).mock.calls[1]?.[1]
+      ?.body as URLSearchParams;
+    expect(body.get('tipoApontamento')).toBe('2');
+    expect(body.get('apontamento.clienteSelecionadoAvulso')).toBe('1');
+    expect(body.get('apontamento.tipoOperacaoSelecionado')).toBe('13');
+    expect(body.get('apontamento.idTipoAtividadeAvulso')).toBe('695');
+    expect(body.get('apontamento.comentario')).toBe('Lightning Talk');
   });
 });
 

@@ -11,6 +11,7 @@ export interface LoginSiteDefinition {
   readonly formSelector: string;
   readonly usernameSelector: string;
   readonly passwordSelector: string;
+  readonly workSelector: string;
 }
 
 export const LOGIN_SITES = [
@@ -21,6 +22,7 @@ export const LOGIN_SITES = [
     formSelector: '#boxLogin',
     usernameSelector: '[name="matricula"]',
     passwordSelector: '[name="senha"]',
+    workSelector: '#mirror',
   },
   {
     role: 'target',
@@ -30,11 +32,52 @@ export const LOGIN_SITES = [
     formSelector: '#loginForm',
     usernameSelector: '[name="username"]',
     passwordSelector: '[name="password"]',
+    workSelector: '#totalItensPagina',
   },
 ] as const satisfies readonly LoginSiteDefinition[];
 
 export type LoginSubmitResult =
   'submitted' | 'already-authenticated' | 'not-filled';
+
+export interface LoginDocumentProbe {
+  readonly ready: boolean;
+  readonly formPresent: boolean;
+  readonly formVisible: boolean;
+  readonly workMarkerPresent: boolean;
+  readonly pathname: string;
+}
+
+/** Executada no MAIN world; distingue formulário existente de formulário visível. */
+export function probeLoginDocument(
+  formSelector: string,
+  workSelector?: string,
+): LoginDocumentProbe {
+  const form = document.querySelector<HTMLElement>(formSelector);
+  let formVisible = form !== null;
+  for (let element = form; element; element = element.parentElement) {
+    const style = globalThis.getComputedStyle(element);
+    if (
+      element.hidden ||
+      element.getAttribute('aria-hidden') === 'true' ||
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.visibility === 'collapse' ||
+      style.opacity === '0'
+    ) {
+      formVisible = false;
+      break;
+    }
+  }
+  return {
+    ready: document.readyState !== 'loading',
+    formPresent: form !== null,
+    formVisible,
+    workMarkerPresent:
+      workSelector !== undefined &&
+      document.querySelector(workSelector) !== null,
+    pathname: globalThis.location.pathname,
+  };
+}
 
 /** Executada na página de login; nunca devolve valores dos campos. */
 export async function submitAutofilledLogin(
@@ -64,6 +107,22 @@ export async function submitAutofilledLogin(
       return false;
     }
   };
+  const isVisible = (element: HTMLElement): boolean => {
+    for (let current: HTMLElement | null = element; current;) {
+      const style = globalThis.getComputedStyle(current);
+      if (
+        current.hidden ||
+        current.getAttribute('aria-hidden') === 'true' ||
+        style.display === 'none' ||
+        style.visibility === 'hidden' ||
+        style.visibility === 'collapse' ||
+        style.opacity === '0'
+      )
+        return false;
+      current = current.parentElement;
+    }
+    return true;
+  };
   while (Date.now() <= deadline) {
     const form = document.querySelector<HTMLFormElement>(input.formSelector);
     if (!form) {
@@ -74,6 +133,8 @@ export async function submitAutofilledLogin(
         return 'already-authenticated';
       if (document.readyState === 'complete') return 'already-authenticated';
     } else {
+      if (!isVisible(form) && document.readyState !== 'loading')
+        return 'already-authenticated';
       formSeen = true;
       const username = form.querySelector<HTMLInputElement>(
         input.usernameSelector,

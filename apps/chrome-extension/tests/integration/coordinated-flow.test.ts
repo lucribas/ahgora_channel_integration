@@ -5,13 +5,17 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   advanceQueue,
+  applyTemplateToItem,
   cancelOperation,
   captureAndCompareOperation,
   decideItem,
   fillCurrentQueueItem,
   fillSelectedQueue,
   prepareSelectedQueue,
+  setAllocationTag,
+  selectItemTag,
   selectRemainingItems,
+  updateAllocation,
   type CoordinatorAdapters,
 } from '../../src/background/coordinator';
 import {
@@ -45,6 +49,313 @@ import { makeMirrorCalendarText } from '../fixtures/source/mirror-calendar';
 const projectRoot = resolve(import.meta.dirname, '../..');
 
 describe('coordenador real sobre DOM sintético', () => {
+  it('aplica automaticamente uma regra semanal aos novos dias capturados', async () => {
+    const sourceRunner = new SyntheticSourceRunner(
+      makeMirrorCalendarText('2026-08', {
+        '2026-07-27': ['08:00', '12:00', '13:00', '17:00'],
+      }),
+    );
+    const base = configuredState('automatic-template-rule');
+    if (!base.config) throw new Error('Configuração sintética ausente.');
+    const configured: OperationData = {
+      ...base,
+      config: {
+        ...base.config,
+        markingTemplates: [
+          {
+            id: 'weekly-template',
+            name: 'Segunda padrão',
+            sourceDurationMinutes: 480,
+            createdAt: '2026-08-24T12:00:00.000Z',
+            entries: [
+              {
+                id: 'weekly-template::1',
+                tagId: 'tag-default',
+                percentage: 75,
+                durationMinutes: 360,
+              },
+              {
+                id: 'weekly-template::2',
+                tagId: 'tag-secondary',
+                percentage: 25,
+                durationMinutes: 120,
+              },
+            ],
+          },
+        ],
+        templateRules: [
+          {
+            id: 'monday-rule',
+            name: 'Segundas padrão',
+            enabled: true,
+            repeatEveryWeeks: 1,
+            weekdays: [1],
+            startsOn: civilDate('2026-07-01'),
+            ends: { kind: 'never' },
+            templates: [{ templateId: 'weekly-template', percentage: 100 }],
+          },
+        ],
+      },
+    };
+    const preview = await captureAndCompareOperation(
+      configured,
+      adaptersFor(
+        sourceRunner,
+        makeExtractDocument(''),
+        await fixtureDocument('form'),
+        () => undefined,
+      ),
+    );
+
+    expect(preview.items[0]).toMatchObject({
+      date: '2026-07-27',
+      decision: 'selected',
+      appliedRuleId: 'monday-rule',
+      appliedRuleName: 'Segundas padrão',
+      allocations: [
+        { duration: '06:00', tagId: 'tag-default' },
+        { duration: '02:00', tagId: 'tag-secondary' },
+      ],
+    });
+  });
+
+  it('permite ajustar proporcionalmente um conjunto de horas que excede o novo dia', async () => {
+    const sourceRunner = new SyntheticSourceRunner(
+      makeMirrorCalendarText('2026-08', {
+        '2026-07-27': ['08:00', '12:00', '13:00', '17:00'],
+      }),
+    );
+    const preview = await captureAndCompareOperation(
+      configuredState('manual-template-overflow'),
+      adaptersFor(
+        sourceRunner,
+        makeExtractDocument(''),
+        await fixtureDocument('form'),
+        () => undefined,
+      ),
+    );
+    const template = {
+      id: 'nine-hours',
+      name: 'Dia de nove horas',
+      sourceDurationMinutes: 540,
+      createdAt: '2026-08-24T12:00:00.000Z',
+      entries: [
+        {
+          id: 'nine-hours::1',
+          tagId: 'tag-default',
+          percentage: 66.6667,
+          durationMinutes: 360,
+        },
+        {
+          id: 'nine-hours::2',
+          tagId: 'tag-secondary',
+          percentage: 33.3333,
+          durationMinutes: 180,
+        },
+      ],
+    } as const;
+
+    expect(() =>
+      applyTemplateToItem(
+        preview,
+        '2026-07-27',
+        template,
+        'duration',
+        'reject',
+      ),
+    ).toThrow(/09:00/);
+    const adjusted = applyTemplateToItem(
+      preview,
+      '2026-07-27',
+      template,
+      'duration',
+      'scale',
+    );
+    expect(adjusted.items[0]).toMatchObject({
+      decision: 'selected',
+      appliedTemplateIds: ['nine-hours'],
+      allocations: [
+        { duration: '05:20', tagId: 'tag-default' },
+        { duration: '02:40', tagId: 'tag-secondary', isRemainder: true },
+      ],
+    });
+  });
+
+  it('preserva as marcações individuais lidas do Channel na prévia', async () => {
+    const sourceRunner = new SyntheticSourceRunner(
+      makeMirrorCalendarText('2026-08', {
+        '2026-07-27': ['08:00', '12:00', '13:00', '17:00'],
+      }),
+    );
+    const base = adaptersFor(
+      sourceRunner,
+      makeExtractDocument(''),
+      await fixtureDocument('form'),
+      () => undefined,
+    );
+    const preview = await captureAndCompareOperation(
+      configuredState('channel-markings'),
+      {
+        ...base,
+        readTarget: () =>
+          Promise.resolve({
+            ok: true as const,
+            rows: [
+              {
+                rowIndex: 0,
+                date: '2026-07-27',
+                duration: '08:00',
+                durationMinutes: 480,
+                project: 'PROJETO_SINTETICO',
+                activity: 'ATIVIDADE_SINTETICA',
+                markings: [
+                  {
+                    id: '42',
+                    date: '2026-07-27',
+                    duration: '08:00',
+                    durationMinutes: 480,
+                    project: 'PROJETO_SINTETICO',
+                    activity: 'ATIVIDADE_SINTETICA',
+                    canDelete: true,
+                  },
+                ],
+              },
+            ],
+            errors: [],
+          }),
+      },
+    );
+
+    expect(preview.items[0]).toMatchObject({
+      date: '2026-07-27',
+      status: 'equal',
+      channelMarkings: [
+        {
+          id: '42',
+          duration: '08:00',
+          project: 'PROJETO_SINTETICO',
+          activity: 'ATIVIDADE_SINTETICA',
+          canDelete: true,
+        },
+      ],
+    });
+  });
+
+  it('divide progressivamente um dia e envia cada saldo como marcação independente', async () => {
+    const targetRows: {
+      date: ReturnType<typeof civilDate>;
+      duration: string;
+      durationMinutes: number;
+    }[] = [];
+    const sourceRunner = new SyntheticSourceRunner(
+      makeMirrorCalendarText('2026-08', {
+        '2026-07-26': ['08:00', '12:00', '13:00', '17:00'],
+      }),
+    );
+    const base = adaptersFor(
+      sourceRunner,
+      makeExtractDocument(''),
+      await fixtureDocument('form'),
+      () => undefined,
+    );
+    const writeTarget = vi.fn((_state, assignment: ProjectAssignment) => {
+      targetRows.push({
+        date: assignment.date,
+        duration: assignment.duration,
+        durationMinutes: assignment.durationMinutes,
+      });
+      return Promise.resolve({
+        date: assignment.date,
+        requestedMinutes: assignment.durationMinutes,
+        resultingMinutes:
+          (assignment.expectedExistingMinutes ?? 0) +
+          assignment.durationMinutes,
+        status: 'filled' as const,
+      });
+    });
+    const adapters: CoordinatorAdapters = {
+      ...base,
+      readTarget: () =>
+        Promise.resolve({
+          ok: true as const,
+          rows: targetRows.map((row, rowIndex) => ({ rowIndex, ...row })),
+          errors: [],
+        }),
+      writeTarget,
+    };
+
+    const preview = await captureAndCompareOperation(
+      configuredState('multiple-markings'),
+      adapters,
+    );
+    const firstSplit = updateAllocation(
+      preview,
+      '2026-07-26',
+      '2026-07-26',
+      'duration',
+      '03:00',
+    );
+    expect(firstSplit.items[0]?.allocations).toMatchObject([
+      { duration: '03:00', mode: 'duration', isRemainder: false },
+      {
+        id: '2026-07-26::2',
+        duration: '05:00',
+        mode: 'duration',
+        value: '05:00',
+        isRemainder: true,
+        tagId: 'tag-default',
+      },
+    ]);
+    const secondSplit = updateAllocation(
+      firstSplit,
+      '2026-07-26',
+      '2026-07-26::2',
+      'percentage',
+      '25',
+    );
+    const tagged = setAllocationTag(
+      secondSplit,
+      '2026-07-26',
+      '2026-07-26::2',
+      'tag-secondary',
+    );
+    expect(tagged.items[0]?.allocations).toMatchObject([
+      { duration: '03:00', tagId: 'tag-default' },
+      { duration: '02:00', tagId: 'tag-secondary' },
+      { duration: '03:00', tagId: 'tag-default', isRemainder: true },
+    ]);
+
+    const completed = await fillSelectedQueue(
+      prepareSelectedQueue(selectRemainingItems(tagged)),
+      adapters,
+    );
+    expect(completed.phase).toBe('completed');
+    expect(completed.queue).toEqual([
+      '2026-07-26',
+      '2026-07-26::2',
+      '2026-07-26::3',
+    ]);
+    expect(writeTarget).toHaveBeenCalledTimes(3);
+    expect(
+      writeTarget.mock.calls.map(([, assignment]) => ({
+        duration: assignment.duration,
+        project: assignment.project,
+        expected: assignment.expectedExistingMinutes,
+      })),
+    ).toEqual([
+      { duration: '03:00', project: 'PROJETO_SINTETICO', expected: 0 },
+      { duration: '02:00', project: 'PROJETO_SECUNDARIO', expected: 180 },
+      { duration: '03:00', project: 'PROJETO_SINTETICO', expected: 300 },
+    ]);
+    expect(completed.items[0]).toMatchObject({
+      status: 'equal',
+      channelDuration: '08:00',
+      channelProject: 'Múltiplas TAGs',
+      channelActivity: '3 marcações',
+      result: 'filled',
+    });
+  });
+
   it('envia toda a seleção após uma única ação', async () => {
     const targetRows: {
       date: ReturnType<typeof civilDate>;
@@ -104,13 +415,29 @@ describe('coordenador real sobre DOM sintético', () => {
       configuredState('single-action-batch'),
       adapters,
     );
+    const tagged = selectItemTag(preview, '2026-07-28', 'tag-secondary');
     const completed = await fillSelectedQueue(
-      prepareSelectedQueue(selectRemainingItems(preview)),
+      prepareSelectedQueue(selectRemainingItems(tagged)),
       adapters,
     );
 
     expect(completed.phase).toBe('completed');
     expect(writeTarget).toHaveBeenCalledTimes(2);
+    expect(
+      writeTarget.mock.calls.map(([, assignment]) => ({
+        project: assignment.project,
+        activity: assignment.activity,
+      })),
+    ).toEqual([
+      {
+        project: 'PROJETO_SINTETICO',
+        activity: 'ATIVIDADE_SINTETICA',
+      },
+      {
+        project: 'PROJETO_SECUNDARIO',
+        activity: 'ATIVIDADE_SECUNDARIA',
+      },
+    ]);
     expect(completed.items.map(({ result }) => result)).toEqual([
       'filled',
       'filled',
@@ -118,6 +445,21 @@ describe('coordenador real sobre DOM sintético', () => {
     expect(completed.items.map(({ status }) => status)).toEqual([
       'equal',
       'equal',
+    ]);
+    expect(
+      completed.items.map(({ channelProject, channelActivity }) => ({
+        channelProject,
+        channelActivity,
+      })),
+    ).toEqual([
+      {
+        channelProject: 'PROJETO_SINTETICO',
+        channelActivity: 'ATIVIDADE_SINTETICA',
+      },
+      {
+        channelProject: 'PROJETO_SECUNDARIO',
+        channelActivity: 'ATIVIDADE_SECUNDARIA',
+      },
     ]);
     expect(publicState(completed)).toMatchObject({
       reviewCount: 0,
@@ -186,7 +528,7 @@ describe('coordenador real sobre DOM sintético', () => {
     );
     expect(preview.phase).toBe('preview');
     expect(preview.items).toMatchObject([
-      { id: '2026-07-26', status: 'missing', decision: 'pending' },
+      { id: '2026-07-26', status: 'missing', decision: 'selected' },
       { id: '2026-07-27', status: 'equal', decision: 'pending' },
     ]);
     expect(publicState(preview)).toMatchObject({
@@ -194,8 +536,9 @@ describe('coordenador real sobre DOM sintético', () => {
       capturedCount: 2,
       reviewMinutes: 480,
       reviewCount: 1,
-      selectedMinutes: 0,
-      selectedCount: 0,
+      selectedMinutes: 480,
+      selectedCount: 1,
+      canApply: true,
     });
 
     const selected = decideItem(preview, '2026-07-26', 'selected');
@@ -334,6 +677,25 @@ function configuredState(operationId: string): OperationData {
       task: 'Nenhum',
       period: monthPeriod('2026-08'),
       overrides: [],
+      tags: [
+        {
+          id: 'tag-default',
+          name: 'Padrão',
+          projectId: '11',
+          project: 'PROJETO_SINTETICO',
+          activityId: '111',
+          activity: 'ATIVIDADE_SINTETICA',
+        },
+        {
+          id: 'tag-secondary',
+          name: 'Secundária',
+          projectId: '22',
+          project: 'PROJETO_SECUNDARIO',
+          activityId: '222',
+          activity: 'ATIVIDADE_SECUNDARIA',
+        },
+      ],
+      defaultTagId: 'tag-default',
     },
   };
 }

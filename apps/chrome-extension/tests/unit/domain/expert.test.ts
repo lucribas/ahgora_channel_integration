@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { civilDate } from '../../../src/domain/civil-date';
-import { assignExpertProject } from '../../../src/domain/expert';
+import { assignAdHoc, assignExpertProject } from '../../../src/domain/expert';
 
 const DATE = civilDate('2026-08-18');
 
@@ -50,4 +50,27 @@ describe('Expert ativo', () => {
       ).toThrow('maior que zero');
     },
   );
+
+  it('cria apontamento AVULSO preservando natureza, tipo e comentário', () => {
+    expect(
+      assignAdHoc(
+        { date: DATE, durationMinutes: 30 },
+        {
+          client: 'CERTI',
+          operationNature: '13. Formação/Capacitação',
+          activityType: '99601 - Lightning Talk',
+          comments: 'Lightning Talk',
+        },
+      ),
+    ).toEqual({
+      kind: 'AVULSO',
+      client: 'CERTI',
+      operationNature: '13. Formação/Capacitação',
+      activityType: '99601 - Lightning Talk',
+      date: DATE,
+      durationMinutes: 30,
+      duration: '00:30',
+      comments: 'Lightning Talk',
+    });
+  });
 });

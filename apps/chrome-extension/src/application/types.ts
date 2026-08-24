@@ -5,6 +5,11 @@ import type {
   PunchOverride,
   ResolvedPeriod,
 } from '../domain';
+import type {
+  ChannelTag,
+  MarkingTemplate,
+  TemplateApplicationRule,
+} from './settings';
 
 export type TabRole = 'source' | 'target';
 
@@ -13,7 +18,8 @@ export interface RegisteredTab {
   readonly origin: string;
 }
 
-export type SystemProgressStatus = 'waiting' | 'running' | 'done' | 'failed';
+export type SystemProgressStatus =
+  'waiting' | 'running' | 'done' | 'failed' | 'stopped';
 
 export interface SystemProgress {
   readonly status: SystemProgressStatus;
@@ -26,7 +32,13 @@ export interface CaptureProgress {
 }
 
 export type LoginSiteStatus =
-  'idle' | 'opening' | 'awaiting-user' | 'submitted' | 'ready' | 'failed';
+  | 'idle'
+  | 'opening'
+  | 'awaiting-user'
+  | 'submitted'
+  | 'ready'
+  | 'failed'
+  | 'stopped';
 
 export interface LoginPreparation {
   readonly ahgora: LoginSiteStatus;
@@ -39,7 +51,8 @@ export interface LoginPreparation {
   readonly targetTabId?: number;
 }
 
-export type WriteProgressStatus = 'idle' | 'running' | 'done' | 'failed';
+export type WriteProgressStatus =
+  'idle' | 'running' | 'done' | 'failed' | 'stopped';
 
 export interface WriteProgress {
   readonly status: WriteProgressStatus;
@@ -56,6 +69,10 @@ export interface OperationConfig {
   readonly task: string;
   readonly period: PeriodRequest;
   readonly overrides: readonly PunchOverride[];
+  readonly tags?: readonly ChannelTag[];
+  readonly defaultTagId?: string;
+  readonly markingTemplates?: readonly MarkingTemplate[];
+  readonly templateRules?: readonly TemplateApplicationRule[];
 }
 
 export type PreviewStatus = 'missing' | 'equal' | 'divergent' | 'blocked';
@@ -68,11 +85,44 @@ export type FillResultStatus =
   | 'validation-error'
   | 'failed';
 
+export type AllocationMode = 'percentage' | 'duration';
+
+export interface PreviewAllocation {
+  readonly id: string;
+  readonly mode: AllocationMode;
+  /** Valor editável no modo escolhido: percentual decimal ou duração HH:MM. */
+  readonly value: string;
+  readonly durationMinutes: number;
+  readonly duration: string;
+  readonly tagId?: string;
+  readonly ragCatalogId?: string;
+  readonly ragItemId?: string;
+  readonly isRemainder: boolean;
+  readonly result?: FillResultStatus;
+}
+
+export interface ChannelMarking {
+  readonly id: string;
+  readonly duration: string;
+  readonly durationMinutes: number;
+  readonly project?: string;
+  readonly activity?: string;
+  readonly canDelete: boolean;
+}
+
 export interface PreviewItem {
   readonly id: string;
   readonly date: CivilDate;
   readonly ahgoraDuration: string;
   readonly channelDuration?: string;
+  readonly channelProject?: string;
+  readonly channelActivity?: string;
+  readonly channelMarkings?: readonly ChannelMarking[];
+  readonly tagId?: string;
+  readonly allocations?: readonly PreviewAllocation[];
+  readonly appliedTemplateIds?: readonly string[];
+  readonly appliedRuleId?: string;
+  readonly appliedRuleName?: string;
   readonly status: PreviewStatus;
   readonly decision: ItemDecision;
   readonly warning?: string;
@@ -94,7 +144,7 @@ export interface OperationData {
     | 'cancelled'
     | 'failed';
   readonly pendingRole?: TabRole | undefined;
-  readonly inFlight?: 'capture' | 'apply' | 'advance' | undefined;
+  readonly inFlight?: 'capture' | 'apply' | 'advance' | 'delete' | undefined;
   readonly sourceTab?: RegisteredTab | undefined;
   readonly targetTab?: RegisteredTab | undefined;
   readonly loginPreparation?: LoginPreparation;
